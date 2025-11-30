@@ -5,8 +5,6 @@
   become: yes
   gather_facts: no
   vars:
-    prometheus_nodeport: 30091
-    install_prometheus: false
     ansible_python_interpreter: /usr/bin/python3
   pre_tasks:
     - name: Wait for SSH connection
@@ -129,7 +127,6 @@
       debug:
         msg: |
           k3s server deployed
-          Prometheus NodePort (if installed): {{ prometheus_nodeport }}
 
 - name: Join k3s agents
   hosts: k3s_agents
