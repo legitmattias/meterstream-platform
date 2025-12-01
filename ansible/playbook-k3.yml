@@ -1,50 +1,74 @@
 ---
-# Load Terraform Outputs & Build Dynamic Inventory
-- name: Load Terraform outputs (staging + prod)
+# Load Terraform Outputs & Build Dynamic Inventory CHANGE INVENTORY TO TMPL FROM INI
+#- name: Load Terraform outputs (staging + prod)
+#  hosts: localhost
+#  gather_facts: no
+#
+#  tasks:
+#    - name: Load Terraform outputs
+#      command: terraform output -json
+#      args:
+#        chdir: ./terraform
+#      register: tf_outputs
+#
+#    - name: Parse Terraform IPs
+#      set_fact:
+#        staging_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.staging }}"
+#        production_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.production }}"
+#
+#    - debug:
+#        msg:
+#          - "Staging IP: {{ staging_ip }}"
+#          - "Production IP: {{ production_ip }}"
+#
+    # Create EMPTY groups first (Ansible requires this sometimes)
+#    - name: Ensure inventory groups exist
+#      add_host:
+#        name: dummy
+#        groups:
+#          - k3s_server
+#          - k3s_agents
+#
+    # Add staging node
+#    - name: Add staging node to dynamic inventory
+#      add_host:
+#        name: staging
+#        ansible_host: "{{ staging_ip }}"
+#        ansible_user: ubuntu
+#        groups: k3s_server
+
+    # Add production node
+#    - name: Add production node to dynamic inventory
+#      add_host:
+#        name: production
+#        ansible_host: "{{ production_ip }}"
+#        ansible_user: ubuntu
+#        groups: k3s_server
+
+# Without terraform export ips in terminal
+- name: Load env IPs instead of Terraform
   hosts: localhost
   gather_facts: no
 
   tasks:
-    - name: Load Terraform outputs
-      command: terraform output -json
-      args:
-        chdir: ./terraform
-      register: tf_outputs
+    - name: Fail if env vars missing
+      fail:
+        msg: "Missing staging or prod IP"
+      when: staging_plane_public_ip is not defined or prod_public_ip is not defined
 
-    - name: Parse Terraform IPs
-      set_fact:
-        staging_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.staging }}"
-        production_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.production }}"
-
-    - debug:
-        msg:
-          - "Staging IP: {{ staging_ip }}"
-          - "Production IP: {{ production_ip }}"
-
-    # Create EMPTY groups first (Ansible requires this sometimes)
-    - name: Ensure inventory groups exist
-      add_host:
-        name: dummy
-        groups:
-          - k3s_server
-          - k3s_agents
-
-    # Add staging node
-    - name: Add staging node to dynamic inventory
+    - name: Add staging
       add_host:
         name: staging
-        ansible_host: "{{ staging_ip }}"
+        ansible_host: "{{ staging_plane_public_ip }}"
         ansible_user: ubuntu
         groups: k3s_server
 
-    # Add production node
-    - name: Add production node to dynamic inventory
+    - name: Add production
       add_host:
         name: production
-        ansible_host: "{{ production_ip }}"
+        ansible_host: "{{ prod_public_ip }}"
         ansible_user: ubuntu
         groups: k3s_server
-
 
 - name: Deploy k3s server
   hosts: k3s_server
@@ -103,18 +127,6 @@
       until: kubectl_check.rc == 0
       retries: 30
       delay: 5
-    
-    - name: Deploy NGINX Ingress controller
-      tags: nginx
-      shell: |
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.13.0/deploy/static/provider/cloud/deploy.yaml
-      args:
-        executable: /bin/bash
-
-    - name: Wait for NGINX Ingress controller to be ready
-      tags: nginx
-      shell: |
-        kubectl -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=300s
 
     - name: Copy kubeconfig to ubuntu home
       copy:
