@@ -14,7 +14,7 @@
     - name: Parse Terraform IPs
       set_fact:
         staging_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.staging }}"
-        production_ip: "{{ (tf_outputs.stdout | from_json).cluster_ip.prodution }}"
+        production_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.production }}"
 
     - debug:
         msg:
