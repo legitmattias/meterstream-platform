@@ -1,4 +1,51 @@
 ---
+# Load Terraform Outputs & Build Dynamic Inventory
+- name: Load Terraform outputs (staging + prod)
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Load Terraform outputs
+      command: terraform output -json
+      args:
+        chdir: ./terraform
+      register: tf_outputs
+
+    - name: Parse Terraform IPs
+      set_fact:
+        staging_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.staging }}"
+        production_ip: "{{ (tf_outputs.stdout | from_json).cluster_ip.prodution }}"
+
+    - debug:
+        msg:
+          - "Staging IP: {{ staging_ip }}"
+          - "Production IP: {{ production_ip }}"
+
+    # Create EMPTY groups first (Ansible requires this sometimes)
+    - name: Ensure inventory groups exist
+      add_host:
+        name: dummy
+        groups:
+          - k3s_server
+          - k3s_agents
+
+    # Add staging node
+    - name: Add staging node to dynamic inventory
+      add_host:
+        name: staging
+        ansible_host: "{{ staging_ip }}"
+        ansible_user: ubuntu
+        groups: k3s_server
+
+    # Add production node
+    - name: Add production node to dynamic inventory
+      add_host:
+        name: production
+        ansible_host: "{{ production_ip }}"
+        ansible_user: ubuntu
+        groups: k3s_server
+
+
 - name: Deploy k3s server
   hosts: k3s_server
   tags: deploy
