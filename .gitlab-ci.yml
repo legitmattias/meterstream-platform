@@ -21,8 +21,6 @@ test-staging-connection:
 
     - echo "=== Checking decoded file ==="
     - ls -la kubeconfig
-    - echo "First 20 lines of kubeconfig:"
-    - head -20 kubeconfig
 
     - export KUBECONFIG=$PWD/kubeconfig
 
@@ -54,8 +52,7 @@ test-production-connection:
 
     - echo "=== Checking decoded file ==="
     - ls -la kubeconfig
-    - echo "First 20 lines of kubeconfig:"
-    - head -20 kubeconfig
+
 
     - export KUBECONFIG=$PWD/kubeconfig
 
