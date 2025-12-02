@@ -7,30 +7,12 @@ test-staging-connection:
     name: bitnami/kubectl:latest
     entrypoint: [""]
   script:
-    - echo "=== Checking if variable exists ==="
-    - |
-      if [ -z "$KUBE_CONFIG_STAGING_B64" ]; then
-        echo "ERROR: KUBE_CONFIG_STAGING_B64 is empty!"
-        exit 1
-      else
-        echo "Variable exists, length: ${#KUBE_CONFIG_STAGING_B64} characters"
-      fi
-
-    - echo "=== Decoding kubeconfig ==="
     - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
-
-    - echo "=== Checking decoded file ==="
-    - ls -la kubeconfig
-
     - export KUBECONFIG=$PWD/kubeconfig
-
-    - echo "=== Testing connection ==="
     - kubectl config current-context
     - kubectl get nodes
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      when: always
-    - when: always  # Run on any branch for testing
+    - when: always
 
 test-production-connection:
   stage: test-connection
@@ -38,31 +20,12 @@ test-production-connection:
     name: bitnami/kubectl:latest
     entrypoint: [""]
   script:
-    - echo "=== Checking if variable exists ==="
-    - |
-      if [ -z "$KUBE_CONFIG_PROD_B64" ]; then
-        echo "ERROR: KUBE_CONFIG_PROD_B64 is empty!"
-        exit 1
-      else
-        echo "Variable exists, length: ${#KUBE_CONFIG_PROD_B64} characters"
-      fi
-
-    - echo "=== Decoding kubeconfig ==="
     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
-
-    - echo "=== Checking decoded file ==="
-    - ls -la kubeconfig
-
-
     - export KUBECONFIG=$PWD/kubeconfig
-
-    - echo "=== Testing connection ==="
     - kubectl config current-context
     - kubectl get nodes
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      when: always
-    - when: always  # Run on any branch for testing
+    - when: always
 # stages:
 #   - build
 #   - deploy-staging
