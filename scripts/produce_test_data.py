@@ -45,9 +45,8 @@ def send_batch(url: str, readings: list[dict]) -> bool:
             data = response.json()
             print(f"Sent {data['accepted']} readings")
             return True
-        else:
-            print(f"Error: {response.status_code} - {response.text}")
-            return False
+        print(f"Error: {response.status_code} - {response.text}")
+        return False
     except requests.RequestException as e:
         print(f"Request failed: {e}")
         return False
