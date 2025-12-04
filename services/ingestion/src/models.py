@@ -2,22 +2,19 @@
 
 # pylint: disable=too-few-public-methods
 
-from datetime import datetime
-from pydantic import BaseModel, Field
+from datetime import datetime as dt
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MeterReading(BaseModel):
     """Single meter reading from energy meter."""
 
-    datetime: datetime = Field(..., alias="DateTime")
+    model_config = ConfigDict(populate_by_name=True)
+
+    timestamp: dt = Field(..., alias="DateTime")
     customer: str = Field(..., alias="CUSTOMER")
     area: str = Field(..., alias="AREA")
     power_consumption: float = Field(..., alias="Power_Consumption")
-
-    class Config:
-        """Pydantic config."""
-
-        populate_by_name = True
 
 
 class MeterReadingBatch(BaseModel):
