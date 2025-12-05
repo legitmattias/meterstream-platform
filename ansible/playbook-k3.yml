@@ -1,0 +1,252 @@
+---
+# Load Terraform Outputs & Build Dynamic Inventory CHANGE INVENTORY TO TMPL FROM INI
+#- name: Load Terraform outputs (staging + prod)
+#  hosts: localhost
+#  gather_facts: no
+#
+#  tasks:
+#    - name: Load Terraform outputs
+#      command: terraform output -json
+#      args:
+#        chdir: ./terraform
+#      register: tf_outputs
+#
+#    - name: Parse Terraform IPs
+#      set_fact:
+#        staging_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.staging }}"
+#        production_ip: "{{ (tf_outputs.stdout | from_json).cluster_ips.production }}"
+#
+#    - debug:
+#        msg:
+#          - "Staging IP: {{ staging_ip }}"
+#          - "Production IP: {{ production_ip }}"
+#
+    # Create EMPTY groups first (Ansible requires this sometimes)
+#    - name: Ensure inventory groups exist
+#      add_host:
+#        name: dummy
+#        groups:
+#          - k3s_server
+#          - k3s_agents
+#
+    # Add staging node
+#    - name: Add staging node to dynamic inventory
+#      add_host:
+#        name: staging
+#        ansible_host: "{{ staging_ip }}"
+#        ansible_user: ubuntu
+#        groups: k3s_server
+
+    # Add production node
+#    - name: Add production node to dynamic inventory
+#      add_host:
+#        name: production
+#        ansible_host: "{{ production_ip }}"
+#        ansible_user: ubuntu
+#        groups: k3s_server
+
+# Without terraform export ips in terminal
+- name: Load env IPs instead of Terraform
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Fail if env vars missing
+      fail:
+        msg: "Missing staging or prod IP"
+      when: staging_plane_public_ip is not defined or prod_public_ip is not defined
+
+    - name: Add staging
+      add_host:
+        name: staging
+        ansible_host: "{{ staging_plane_public_ip }}"
+        ansible_user: ubuntu
+        groups: k3s_server
+
+    - name: Add production
+      add_host:
+        name: production
+        ansible_host: "{{ prod_public_ip }}"
+        ansible_user: ubuntu
+        groups: k3s_server
+
+- name: Deploy k3s server
+  hosts: k3s_server
+  tags: deploy
+  become: yes
+  gather_facts: no
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  pre_tasks:
+    - name: Wait for SSH connection
+      wait_for_connection:
+        timeout: 300
+    - name: Gather facts
+      setup:
+  tasks:
+    - name: Install prerequisites
+      apt:
+        name:
+          - curl
+          - ca-certificates
+          - apt-transport-https
+        state: present
+        update_cache: yes
+
+    - name: Download k3s install script (idempotent)
+      shell: |
+        curl -fsSL https://get.k3s.io -o /tmp/get_k3s.sh
+      args:
+        creates: /tmp/get_k3s.sh
+
+    - name: Ensure k3s install script is executable
+      file:
+        path: /tmp/get_k3s.sh
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Install k3s server
+      shell: |
+        /tmp/get_k3s.sh server --write-kubeconfig-mode 644 --tls-san {{ ansible_host }}
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Wait for k3s service to be active
+      systemd:
+        name: k3s
+        state: started
+      register: k3s_service
+      until: k3s_service.status.ActiveState == "active"
+      retries: 30
+      delay: 10
+
+    - name: Wait for kubectl to be available
+      command: kubectl get nodes --kubeconfig /etc/rancher/k3s/k3s.yaml
+      register: kubectl_check
+      until: kubectl_check.rc == 0
+      retries: 30
+      delay: 5
+
+    - name: Copy kubeconfig to ubuntu home
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /home/ubuntu/kubeconfig.yaml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+        remote_src: yes
+
+    - name: Fetch server CA certificate
+      slurp:
+        src: /var/lib/rancher/k3s/server/tls/server-ca.crt
+      register: server_ca_cert
+      ignore_errors: yes
+
+    - name: Fetch client admin certificate
+      slurp:
+        src: /var/lib/rancher/k3s/server/tls/client-admin.crt
+      register: client_admin_cert
+      ignore_errors: yes
+
+    - name: Fetch client admin key
+      slurp:
+        src: /var/lib/rancher/k3s/server/tls/client-admin.key
+      register: client_admin_key
+      ignore_errors: yes
+
+    - name: Generate external kubeconfig file (if certs available)
+      copy:
+        content: |
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              certificate-authority-data: "{{ server_ca_cert.content | default('') }}"
+              server: https://{{ ansible_host }}:6443
+            name: k3s
+          contexts:
+          - context:
+              cluster: k3s
+              user: admin
+            name: k3s
+          current-context: k3s
+          users:
+          - name: admin
+            user:
+              client-certificate-data: "{{ client_admin_cert.content | default('') }}"
+              client-key-data: "{{ client_admin_key.content | default('') }}"
+        dest: /home/ubuntu/kubeconfig-external.yaml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      when: server_ca_cert is defined and client_admin_cert is defined and client_admin_key is defined
+
+    - name: Show deployment summary
+      debug:
+        msg: |
+          k3s server deployed
+
+- name: Join k3s agents
+  hosts: k3s_agents
+  tags: join
+  become: yes
+  gather_facts: no
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  pre_tasks:
+    - name: Wait for SSH connection
+      wait_for_connection:
+        timeout: 300
+    - name: Gather facts
+      setup:
+  tasks:
+    - name: Install prerequisites
+      apt:
+        name:
+          - curl
+          - ca-certificates
+        state: present
+        update_cache: yes
+
+    - name: Download k3s install script
+      shell: |
+        curl -fsSL https://get.k3s.io -o /tmp/get_k3s.sh
+      args:
+        creates: /tmp/get_k3s.sh
+
+    - name: Ensure k3s install script is executable
+      file:
+        path: /tmp/get_k3s.sh
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Fetch node token from server (delegated)
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: node_token_raw
+      delegate_to: "{{ groups['k3s_server'] | first }}"
+      run_once: true
+
+    - name: Decode node token
+      set_fact:
+        k3s_node_token: "{{ (node_token_raw.content | b64decode).splitlines()[0] }}"
+
+    - name: Install k3s agent and join server
+      shell: |
+        /tmp/get_k3s.sh agent --server https://{{ hostvars[groups['k3s_server'] | first].ansible_host | default(hostvars[groups['k3s_server'] | first].ansible_default_ipv4.address) }}:6443 --token '{{ k3s_node_token }}'
+      args:
+        creates: /usr/local/bin/k3s
+      # allow the installer to run asynchronously and let Ansible poll for completion
+      async: 600
+      poll: 10
+
+    - name: Ensure k3s agent service is started
+      systemd:
+        name: k3s-agent
+        state: started
+
+    - name: Show node join summary
+      debug:
+        msg: "Node {{ inventory_hostname }} joined to k3s server"
