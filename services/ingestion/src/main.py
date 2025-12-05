@@ -59,7 +59,9 @@ async def ingest(batch: MeterReadingBatch):
     if not nats_client.is_connected:
         raise HTTPException(status_code=503, detail="NATS not connected")
 
-    readings_data = [reading.model_dump(by_alias=True) for reading in batch.readings]
+    readings_data = [
+        reading.model_dump(by_alias=True, mode="json") for reading in batch.readings
+    ]
 
     try:
         count = await nats_client.publish_batch(readings_data)
