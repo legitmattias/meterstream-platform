@@ -1,7 +1,9 @@
 # MeterStream Development Makefile
 # Run 'make help' to see available commands
 
-.PHONY: help dev-up dev-down dev-logs ingestion-run ingestion-test ingestion-lint producer-run clean
+SHELL := /bin/bash
+
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw ingestion-run ingestion-test ingestion-lint producer-run clean
 
 help:
 	@echo "MeterStream Development Commands"
@@ -10,6 +12,7 @@ help:
 	@echo "  make dev-up        Start NATS for local development"
 	@echo "  make dev-down      Stop NATS"
 	@echo "  make dev-logs      Show NATS logs"
+	@echo "  make nats-status   Show NATS JetStream status (streams, messages)"
 	@echo ""
 	@echo "Ingestion Service:"
 	@echo "  make ingestion-run   Run the ingestion service locally"
@@ -33,6 +36,12 @@ dev-down:
 
 dev-logs:
 	docker compose -f docker-compose.dev.yaml logs -f
+
+nats-status:
+	@python3 scripts/nats_status.py
+
+nats-status-raw:
+	@curl -s http://localhost:8222/jsz 2>/dev/null | python3 -m json.tool || echo "NATS not running"
 
 # Ingestion Service
 ingestion-run:
