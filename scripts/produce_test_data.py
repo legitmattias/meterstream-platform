@@ -63,35 +63,46 @@ def main():
         --rate: Batches per second rate limit (default: 10)
         --limit: Maximum readings to send, 0 for all (default: 0)
     """
-    parser = argparse.ArgumentParser(description="Send test data to ingestion service")
+    parser = argparse.ArgumentParser(
+        description="Send test data to the Ingestion Service.",
+        epilog="""
+Examples:
+  %(prog)s                              # Send all data from small dataset
+  %(prog)s --limit 100                  # Send only 100 readings
+  %(prog)s --rate 2 --limit 50          # Send slowly for debugging
+  %(prog)s --file ../data/test_data_medium.csv  # Use medium dataset
+  %(prog)s --batch-size 200 --rate 0    # Large batches, no rate limit
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--file",
         type=Path,
         default=Path(__file__).parent.parent / "data" / "test_data_small.csv",
-        help="Path to CSV file with test data",
+        help="Path to CSV file (default: data/test_data_small.csv)",
     )
     parser.add_argument(
         "--url",
         default="http://localhost:8000",
-        help="Ingestion service URL",
+        help="Ingestion service URL (default: http://localhost:8000)",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
         default=50,
-        help="Number of readings per batch",
+        help="Readings per HTTP request (default: 50)",
     )
     parser.add_argument(
         "--rate",
         type=float,
         default=10,
-        help="Batches per second (rate limit)",
+        help="Batches per second, 0 for unlimited (default: 10)",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=0,
-        help="Maximum readings to send (0 for all)",
+        help="Max readings to send, 0 for all (default: 0)",
     )
     args = parser.parse_args()
 
