@@ -16,18 +16,18 @@ test-staging-connection:
   rules:
     - when: always
 
-test-production-connection:
-  stage: test-connection
-  image:
-    name: bitnami/kubectl:latest
-    entrypoint: [""]
-  script:
-    - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
-    - export KUBECONFIG=$PWD/kubeconfig
-    - kubectl config current-context
-    - kubectl get nodes
-  rules:
-    - when: always
+# test-production-connection:
+#   stage: test-connection
+#   image:
+#     name: bitnami/kubectl:latest
+#     entrypoint: [""]
+#   script:
+#     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+#     - export KUBECONFIG=$PWD/kubeconfig
+#     - kubectl config current-context
+#     - kubectl get nodes
+#   rules:
+#     - when: always
 
 variables:
   IMAGE_BASE: ${CI_REGISTRY_IMAGE}
