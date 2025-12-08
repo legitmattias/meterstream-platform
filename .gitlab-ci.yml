@@ -86,7 +86,7 @@ deploy-staging:
     - kubectl get nodes
 
     # Apply K8s manifests
-    - kubectl apply -f k8s/ingestion/
+    - kubectl apply -f k8s/ingestion/ -n meterstream
 
     # Update image
     - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
