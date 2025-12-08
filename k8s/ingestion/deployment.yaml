@@ -16,8 +16,7 @@ spec:
     spec:
       containers:
         - name: ingestion
-          # TODO: Update with actual registry path after CI/CD is set up
-          image: registry.example.com/meterstream/ingestion:latest
+          image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/ingestion:latest
           ports:
             - containerPort: 8000
               name: http
