@@ -47,3 +47,20 @@ Storage:   45 KB
 Streams:   1
 Consumers: 1
 ```
+
+## peek_kalmar1_kafka.js
+
+Peek at Kalmar Energi Team 1's Kafka data stream. Useful for checking their data format.
+
+**Requires Node.js:**
+```bash
+npm install kafkajs
+```
+
+```bash
+node peek_kalmar1_kafka.js       # Read 5 messages
+node peek_kalmar1_kafka.js 1     # Quick peek at 1 message
+node peek_kalmar1_kafka.js 20    # Read 20 messages
+```
+
+Note: Their stream uses synthetic meter IDs (`meter-001`, `meter-002`, etc.) that cycle continuously - not suitable for customer-based aggregation.
