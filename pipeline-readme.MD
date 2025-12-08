@@ -73,16 +73,16 @@ Konfigureras i: **Settings → CI/CD → Variables**
 ---
 
 
-## Deployment-strategi (Feature Branch)
+## development-strategi (Feature Branch)
 
-Just nu kör vi all kod via en `deployment`-branch först för att verifiera 
+Just nu kör vi all kod via en `development`-branch först för att verifiera 
 att allt fungerar innan vi mergar till `main`.
 
 ### Så här gör du:
 
-1. Ändra branch-villkor i `.gitlab-ci.yml` (main → deployment)
+1. Ändra branch-villkor i `.gitlab-ci.yml` (main → development)
 2. Ta bort Protected från CI/CD-variabler (behåll Masked!)
-3. Pusha till deployment-branch
+3. Pusha till development-branch
 4. När allt fungerar: Ändra tillbaka till main
 
 
