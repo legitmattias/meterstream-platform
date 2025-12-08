@@ -25,15 +25,15 @@ test-production-connection:
     - kubectl config current-context
     - kubectl get nodes
   rules:
-    - when: always
+    - when: manual
 # stages:
 #   - build
 #   - deploy-staging
 #   - deploy-production
 
 # variables:
-#   IMAGE_BASE: ${CI_REGISTRY_IMAGE}
-#   TAG: ${CI_COMMIT_SHORT_SHA}
+#   IMAGE_BASE: ${CI_REGISTRY_IMAGE} # = gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/"SERVICE":latest
+#   TAG: ${CI_COMMIT_SHORT_SHA} # = e.g., "a1b2c3d"
 
 # # ------------------------------
 # # Build Template
@@ -80,7 +80,7 @@ test-production-connection:
 #     SERVICE_NAME: auth
 
 # # ------------------------------
-# # Deploy to Staging (Automatic)
+# # Deploy to Staging (Manual)
 # # ------------------------------
 # deploy-staging:
 #   stage: deploy-staging
@@ -112,6 +112,7 @@ test-production-connection:
 #     name: staging
 #   rules:
 #     - if: '$CI_COMMIT_BRANCH == "main"'
+#       when: manual
 
 # # ------------------------------
 # # Deploy to Production (Manual)
@@ -149,8 +150,6 @@ test-production-connection:
 
 # ---
 
-# ## What You Need to Set Up
-
 # ### 1. Folder structure
 # ```
 # meterstream/
@@ -162,5 +161,3 @@ test-production-connection:
 #     │   └── Dockerfile
 #     └── auth/
 #         └── Dockerfile
-# KUBE_CONFIG_STAGING_B64  Variable Yes Yes
-# KUBE_CONFIG_PROD_B64 Variable Yes Yes
