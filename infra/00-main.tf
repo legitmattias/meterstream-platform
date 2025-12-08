@@ -1,4 +1,18 @@
 #00-main.tf
+terraform {
+  required_version = ">= 0.14.0"
+  required_providers {
+    openstack = {
+      source  = "terraform-provider-openstack/openstack"
+      version = "~> 1.53.0"
+    }
+  }
+}
+
+provider "openstack" {
+  auth_url = "https://cumulus.lnu.se:5000/v3"
+}
+
 resource "openstack_networking_network_v2" "the_network" {
   name           = "group_project_network"
   admin_state_up = true
@@ -12,7 +26,7 @@ resource "openstack_networking_subnet_v2" "the_subnet" {
 resource "openstack_networking_router_v2" "the_router" {
   name                = "group_router"
   admin_state_up      = true
-  external_network_id = var.external_network_name
+  external_network_id = var.external_network_id
 }
 
 resource "openstack_networking_router_interface_v2" "router_interface_1" {
@@ -44,6 +58,16 @@ resource "openstack_networking_secgroup_rule_v2" "secgroup_rule_webport80" {
   security_group_id = openstack_networking_secgroup_v2.the_secgroup.id
 }
 
+resource "openstack_networking_secgroup_rule_v2" "allow_k3s_api" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "tcp"
+  port_range_min    = var.api_port
+  port_range_max    = var.api_port
+  remote_ip_prefix  = "0.0.0.0/0"
+  security_group_id = openstack_networking_secgroup_v2.the_secgroup.id
+}
+
 
 resource "openstack_networking_port_v2" "port_1" {
   for_each       = var.env_names 
@@ -65,11 +89,11 @@ resource "openstack_compute_instance_v2" "the_server" {
   network {
     port = openstack_networking_port_v2.port_1[each.key].id
   }
-  ## Copy team member keys into machine
+  ## Copy team member keys into created VMs.
   user_data = <<-EOF
     #!/bin/bash
-    echo "Adding teammate keys..."
-    %{ for key in var.teammate_public_keys ~}
+    echo "Adding teammember keys..."
+    %{ for key in var.teammember_public_keys ~}
     echo "${key}" >> /home/ubuntu/.ssh/authorized_keys
     %{ endfor ~}
     chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys

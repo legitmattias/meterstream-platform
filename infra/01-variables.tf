@@ -7,12 +7,12 @@ variable "env_names" {
 
 variable "key_name" {
   type    = string
-  default = "Please export an environment variable TF_VAR_key_name with the name of the public key on your Cumulus"
+  default = "Key-name on Cumulus, variable set in `terraform.tfvars`"
 }
 
 variable "identity_file" {
   type    = string
-  default = "Please export an environment variable TF_VAR_identity_file with the path to your key for ansible machine (path of the .pem file)."
+  default = "Path to private key (.pem) used for SSH / Ansible, variable set in `terraform.tfvars`"
 }  
 
 variable "image_name" {
@@ -51,6 +51,12 @@ variable "web_port" {
   default = 80 
 }
 
+variable "api_port" {
+  description = "Port to allow GitLab access K3S-cluster"
+  type = number
+  default = 6443
+}
+
 variable "ssh_port" { 
   description = "ssh_port"
   type = number
@@ -63,9 +69,9 @@ variable "user" {
   default = "ubuntu"
 }
 
-variable "teammate_public_keys" {
+variable "teammember_public_keys" {
   description = "List of public SSH-keys for member access."
   type        = list(string)
-  default     = ["Key1, key2, key3"] 
+  default     = [] 
 }
 
