@@ -79,6 +79,11 @@ test-production-connection:
 #   variables:
 #     SERVICE_NAME: auth
 
+# build-gateway:
+#   extends: .build
+#   variables:
+#     SERVICE_NAME: gateway
+
 # # ------------------------------
 # # Deploy to Staging (Manual)
 # # ------------------------------
@@ -91,6 +96,7 @@ test-production-connection:
 #     - build-ingestion
 #     - build-processor
 #     - build-auth
+#     - build-gateway
 #   script:
 #     - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
 #     - export KUBECONFIG=$PWD/kubeconfig
@@ -103,11 +109,13 @@ test-production-connection:
 #     - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
 #     - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
 #     - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
+#     - kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${TAG}"
 
 #     # Wait for rollouts
 #     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
 #     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
 #     - kubectl -n meterstream rollout status deploy/auth --timeout=120s
+#     - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
 #   environment:
 #     name: staging
 #   rules:
@@ -136,11 +144,13 @@ test-production-connection:
 #     - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
 #     - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
 #     - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
+#     - kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${TAG}"
 
 #     # Wait for rollouts
 #     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
 #     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
 #     - kubectl -n meterstream rollout status deploy/auth --timeout=120s
+#     - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
 #   environment:
 #     name: production
 #   rules:
@@ -159,5 +169,7 @@ test-production-connection:
 #     │   └── Dockerfile
 #     ├── processor/
 #     │   └── Dockerfile
-#     └── auth/
+#     ├── auth/
+#     │   └── Dockerfile
+#     └── gateway/
 #         └── Dockerfile
