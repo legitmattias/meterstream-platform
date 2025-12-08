@@ -1,0 +1,24 @@
+# Development environment for MeterStream
+# Usage: docker compose -f docker-compose.dev.yaml up -d
+#
+# This starts NATS JetStream locally for development.
+# Services can run locally (outside Docker) and connect to NATS.
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    container_name: meterstream-nats
+    command: ["--jetstream", "--store_dir", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  nats-data:
