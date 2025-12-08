@@ -12,7 +12,7 @@ test-staging-connection:
     - kubectl config current-context
     - kubectl get nodes
   rules:
-    - when: always
+    - when: manual
 
 test-production-connection:
   stage: test-connection
