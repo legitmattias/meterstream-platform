@@ -24,7 +24,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: str
     created_at: datetime
-    role: str = "user"
+    role: str = "customer"
     customer_id: Optional[str] = None
 
 
@@ -44,7 +44,7 @@ class UserInDB(BaseModel):
     email: EmailStr
     hashed_password: str
     name: str
-    role: str = "user"
+    role: str = "customer"
     customer_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

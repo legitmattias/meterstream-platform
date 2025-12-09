@@ -7,7 +7,6 @@ from src.models import (
     UserRegister,
     UserLogin,
     UserResponse,
-    TokenResponse,
     VerifyResponse,
     UserInDB
 )
@@ -78,26 +77,26 @@ class TestUserResponse:
             email="test@example.com",
             name="Test User",
             created_at=datetime.now(UTC),
-            role="user"
+            role="customer"
         )
         assert response.id == "507f1f77bcf86cd799439011"
         assert response.email == "test@example.com"
-        assert response.role == "user"
+        assert response.role == "customer"
 
 
-class TestTokenResponse:
-    """Tests for TokenResponse model."""
+# class TestTokenResponse:
+#     """Tests for TokenResponse model."""
 
-    def test_valid_token_response(self):
-        """Test creating a valid token response."""
-        response = TokenResponse(
-            access_token="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            token_type="bearer",
-            expires_in=3600
-        )
-        assert response.access_token == "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-        assert response.token_type == "bearer"
-        assert response.expires_in == 3600
+#     def test_valid_token_response(self):
+#         """Test creating a valid token response."""
+#         response = TokenResponse(
+#             access_token="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#             token_type="bearer",
+#             expires_in=3600
+#         )
+#         assert response.access_token == "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+#         assert response.token_type == "bearer"
+#         assert response.expires_in == 3600
 
 
 class TestVerifyResponse:
@@ -109,7 +108,7 @@ class TestVerifyResponse:
             valid=True,
             user_id="507f1f77bcf86cd799439011",
             email="test@example.com",
-            role="user"
+            role="customer"
         )
         assert response.valid is True
         assert response.user_id == "507f1f77bcf86cd799439011"

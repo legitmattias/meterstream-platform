@@ -52,11 +52,22 @@ make mongo-up
 # or run
 docker run -d --name mongodb-dev -p 27017:27017 mongo:7
 
+# Mongo logs ( shows last 50 lines)
+make mongo-logs
+
+# Stop mongo db
+make mongo-down
+
 
 # Run app
 make auth-run
+# Run tests on auth app
+make auth-test
 # or
 uvicorn src.main:app --reload
+
+# Deactivate venv enviroment
+deactivate
 ```
 
 ## API Endpoints

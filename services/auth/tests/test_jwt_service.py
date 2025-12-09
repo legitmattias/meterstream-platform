@@ -57,7 +57,7 @@ class TestJWTTokens:
         """Test creating an access token."""
         user_id = "507f1f77bcf86cd799439011"
         email = "test@example.com"
-        role = "user"
+        role = "customer"
 
         token, expires_in = create_access_token(user_id, email, role)
 
@@ -70,7 +70,7 @@ class TestJWTTokens:
         """Test verifying a valid token."""
         user_id = "507f1f77bcf86cd799439011"
         email = "test@example.com"
-        role = "user"
+        role = "customer"
 
         token, _ = create_access_token(user_id, email, role)
         payload = verify_token(token)
@@ -91,7 +91,7 @@ class TestJWTTokens:
         """Test verifying a tampered token."""
         user_id = "507f1f77bcf86cd799439011"
         email = "test@example.com"
-        role = "user"
+        role = "customer"
 
         token, _ = create_access_token(user_id, email, role)
         tampered_token = token[:-5] + "XXXXX"
@@ -103,7 +103,7 @@ class TestJWTTokens:
         """Test that token expiration is set correctly."""
         user_id = "507f1f77bcf86cd799439011"
         email = "test@example.com"
-        role = "user"
+        role = "customer"
 
         _, expires_in = create_access_token(user_id, email, role)
 
@@ -114,7 +114,7 @@ class TestJWTTokens:
         """Test creating and verifying token with customer_id."""
         user_id = "507f1f77bcf86cd799439011"
         email = "test@example.com"
-        role = "user"
+        role = "customer"
         customer_id = "customer-123"
 
         token, _ = create_access_token(user_id, email, role, customer_id)
@@ -130,7 +130,7 @@ class TestJWTTokens:
         """Test token works without customer_id (None)."""
         user_id = "507f1f77bcf86cd799439011"
         email = "test@example.com"
-        role = "user"
+        role = "customer"
 
         token, _ = create_access_token(user_id, email, role)
         payload = verify_token(token)
@@ -183,7 +183,7 @@ class TestRefreshTokens:
         """Test that access token is rejected when verifying as refresh token."""
         user_id = "507f1f77bcf86cd799439011"
         email = "test@example.com"
-        role = "user"
+        role = "customer"
 
         # Create an access token
         access_token, _ = create_access_token(user_id, email, role)

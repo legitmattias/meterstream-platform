@@ -54,7 +54,7 @@ async def register(request: Request, user_data: UserRegister, users=Depends(get_
         "email": user_data.email,
         "hashed_password": hash_password(user_data.password),
         "name": user_data.name,
-        "role": "user",
+        "role": "customer",
         "customer_id": None,
         "created_at": datetime.now(UTC)
     }
@@ -104,7 +104,7 @@ async def login(request: Request, user_data: UserLogin, users=Depends(get_users_
     access_token, expires_in = create_access_token(
         user_id=str(user["_id"]),
         email=user["email"],
-        role=user.get("role", "user"),
+        role=user.get("role", "customer"),
         customer_id=user.get("customer_id")
     )
     refresh_token = create_refresh_token(user_id=str(user["_id"]))
@@ -143,7 +143,7 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
     access_token, expires_in = create_access_token(
         user_id=user_id,
         email=user["email"],
-        role=user.get("role", "user"),
+        role=user.get("role", "customer"),
         customer_id=user.get("customer_id")
     )
     refresh_token = create_refresh_token(user_id=user_id)
