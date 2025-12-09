@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 # Request models (vad API:et tar emot)
@@ -22,6 +22,7 @@ class UserResponse(BaseModel):
     name: str
     created_at: datetime
     role: str = "user"
+    customer_id: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -35,6 +36,7 @@ class VerifyResponse(BaseModel):
     user_id: Optional[str] = None
     email: Optional[str] = None
     role: Optional[str] = None
+    customer_id: Optional[str] = None
 
 
 # Database model (hur det sparas i MongoDB)
@@ -43,4 +45,16 @@ class UserInDB(BaseModel):
     hashed_password: str
     name: str
     role: str = "user"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    customer_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+# Refresh token models
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenPairResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
