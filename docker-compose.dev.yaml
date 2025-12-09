@@ -19,6 +19,23 @@ services:
       interval: 5s
       timeout: 3s
       retries: 3
+  
+  influxdb:
+    image: influxdb:2.7
+    container_name: meterstream-influxdb
+    ports:
+      - "8086:8086"
+    env_file:
+      - .env
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
 
 volumes:
   nats-data:
+  influxdb-data:
