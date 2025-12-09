@@ -242,9 +242,9 @@ deploy-nats-staging:
 #   - NATS must be running
 deploy-ingestion-staging:
   extends: .deploy-base
-  needs:
-    - job: build-ingestion
-      optional: true  # Can deploy even if build was skipped
+  # needs:
+  #   - job: build-ingestion
+  #     optional: true  # Can deploy even if build was skipped
   script:
     # Apply manifests (service, deployment)
     - kubectl apply -f k8s/ingestion/ -n meterstream
