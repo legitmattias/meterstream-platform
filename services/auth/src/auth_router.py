@@ -173,9 +173,3 @@ async def verify(token: str):
         role=payload["role"],
         customer_id=payload.get("customer_id")
     )
-
-
-@router.get("/health")
-async def health():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "auth"}

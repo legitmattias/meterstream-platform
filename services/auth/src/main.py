@@ -48,8 +48,14 @@ async def root():
         "status": "running",
         "docs": "/docs",
         "api-calls": "/auth/",
-        "healt": "auth/health"
+        "health": "/health"
     }
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for Kubernetes liveness probe."""
+    return {"status": "healthy", "service": "auth"}
 
 
 @app.get("/ready")
