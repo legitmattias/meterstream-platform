@@ -9,7 +9,6 @@ from .models import (
     UserRegister,
     UserLogin,
     UserResponse,
-    TokenResponse,
     VerifyResponse,
     RefreshTokenRequest,
     TokenPairResponse

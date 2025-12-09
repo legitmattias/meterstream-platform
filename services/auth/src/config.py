@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     jwt_refresh_expire_days: int = 7
 
     # Service
-    service_name: str = "auth-service"
+    service_name: str = "Meterstream auth-service"
     debug: bool = True
     log_level: str = "INFO"
 

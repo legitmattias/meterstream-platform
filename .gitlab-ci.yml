@@ -7,9 +7,10 @@
 #   1. test-connection - Verify kubectl can connect to K8s cluster
 #   2. build          - Build Docker images with Kaniko
 #   3. deploy-staging - Deploy to staging environment
+#   4. deploy-prod    - TBC
 #
 # Triggers:
-#   - Automatic: When code changes in relevant directories (development branch)
+#   - Automatic: When code changes in relevant directories (development branch bortkommenterat för nu!!)
 #   - Manual: Can be triggered manually for any job
 # ==============================================================================
 

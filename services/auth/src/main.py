@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from .config import get_settings
 from .mongodb import mongodb
 from .auth_router import router as auth_router
+from .models import HealthResponse
 
 settings = get_settings()
 
@@ -57,7 +58,6 @@ async def root():
     """Root endpoint."""
     return {
         "service": settings.service_name,
-        "status": "running",
         "docs": "/docs",
         "api-calls": "/auth/",
         "health": "/health"
@@ -65,9 +65,9 @@ async def root():
 
 
 @app.get("/health")
-async def health():
+async def health(response_model=HealthResponse):
     """Health check endpoint for Kubernetes liveness probe."""
-    return {"status": "healthy", "service": "auth"}
+    return HealthResponse()
 
 
 @app.get("/ready")
