@@ -46,16 +46,13 @@ pip install -r requirements.txt
 # Copy environment template
 cp .env.example .env
 
-# (requires MongoDB running locally)
-# from root
+# Start MongoDB (from project root)
 make mongo-up
-# or run
-docker run -d --name mongodb-dev -p 27017:27017 mongo:7
 
-# Mongo logs ( shows last 50 lines)
+# View MongoDB logs (shows last 50 lines)
 make mongo-logs
 
-# Stop mongo db
+# Stop MongoDB
 make mongo-down
 
 
@@ -151,7 +148,7 @@ Response:
   }
 }
 ```
-
+# Should move to api gateway
 ### GET /auth/verify?token={jwt_token}
 
 Verify JWT token (used by API Gateway):
@@ -201,14 +198,7 @@ Status: 503
 ## Testing
 
 ```bash
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=src tests/
-
-# Run specific test file
-pytest tests/test_jwt_service.py -v
+make auth-test
 ```
 
 ## Deployment

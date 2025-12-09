@@ -58,14 +58,14 @@ nats-status-raw:
 	@curl -s http://localhost:8222/jsz 2>/dev/null | python3 -m json.tool || echo "NATS not running"
 
 mongo-up:
-	docker run -d --name mongodb-dev -p 27017:27017 mongo:7
+	docker compose -f docker-compose.mongo.yaml up -d
 	@echo "MongoDB is running at localhost:27017"
 
 mongo-down:
-	docker stop mongodb-dev && docker rm mongodb-dev
+	docker compose -f docker-compose.mongo.yaml down
 
 mongo-logs:
-	docker logs -f mongodb-dev --tail 50
+	docker compose -f docker-compose.mongo.yaml logs -f --tail 50
 
 # Ingestion Service
 ingestion-run:
