@@ -221,6 +221,24 @@ The service is deployed to Kubernetes via GitLab CI/CD:
 
 See `.gitlab-ci.yml` for pipeline configuration.
 
+## Future Migration to API Gateway
+
+**NOTE:** The following components are marked for migration to the API Gateway service:
+
+### Components to migrate:
+- **GET /auth/verify endpoint** ([auth_router.py:158-187](services/auth/src/auth_router.py#L158-L187))
+- **verify_token() function** ([jwt_service.py:52-77](services/auth/src/jwt_service.py#L52-L77))
+- **VerifyResponse model** ([models.py:32-43](services/auth/src/models.py#L32-L43))
+
+### Components that stay in Auth Service:
+- **verify_refresh_token()** - Only Auth Service handles refresh tokens
+- All other endpoints (/register, /login, /refresh)
+
+### Migration considerations:
+- The API Gateway will need the same JWT secret key (`JWT_SECRET_KEY`) to verify tokens
+- The API Gateway will validate tokens for all incoming requests to protected endpoints
+- After migration, the /verify endpoint can be removed from Auth Service
+
 ## Environment Variables
 
 Required environment variables (see `.env.example`):

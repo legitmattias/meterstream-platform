@@ -29,8 +29,13 @@ class UserResponse(BaseModel):
 
 
 
+# TODO: MIGRATE TO API GATEWAY
+# This model should be moved to the API Gateway service
 class VerifyResponse(BaseModel):
-    """Model for JWT token verification response"""
+    """Model for JWT token verification response
+
+    NOTE: This model will be migrated to API Gateway in the future
+    """
     valid: bool
     user_id: Optional[str] = None
     email: Optional[str] = None

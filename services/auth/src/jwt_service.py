@@ -49,13 +49,17 @@ def create_access_token(user_id: str, email: str, role: str, customer_id: Option
     
     return token, int(expires_delta.total_seconds())
 
-# TODO: flytta till api gateway??
+# TODO: MIGRATE TO API GATEWAY
+# This function should be moved to the API Gateway service
+# The API Gateway will need this to verify tokens for incoming requests
 def verify_token(token: str) -> Optional[dict]:
     """
     Verify and decode a JWT token.
-    
+
     Returns:
         dict with user info if valid, None if invalid
+
+    NOTE: This function will be migrated to API Gateway in the future
     """
     try:
         payload = jwt.decode(
@@ -97,13 +101,16 @@ def create_refresh_token(user_id: str) -> str:
         algorithm=settings.jwt_algorithm
     )
 
-# TODO: flytta till api gateway??
+# NOTE: This function stays in Auth Service - NOT migrated to API Gateway
+# Only the Auth Service handles refresh tokens to issue new access tokens
 def verify_refresh_token(token: str) -> Optional[str]:
     """
     Verify a refresh token and return user_id.
-    
+
     Returns:
         user_id if valid, None if invalid
+
+    NOTE: This function remains in Auth Service (used by /refresh endpoint)
     """
     try:
         payload = jwt.decode(
@@ -111,11 +118,11 @@ def verify_refresh_token(token: str) -> Optional[str]:
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm]
         )
-        
+
         # Check it's a refresh token
         if payload.get("type") != "refresh":
             return None
-            
+
         return payload.get("sub")
     except JWTError:
         return None

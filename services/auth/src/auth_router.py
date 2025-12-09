@@ -155,13 +155,18 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
     )
 
 
+# TODO: MIGRATE TO API GATEWAY
+# This endpoint should be moved to the API Gateway service
+# The API Gateway will be responsible for verifying JWT tokens for all incoming requests
 @router.get("/verify", response_model=VerifyResponse)
 async def verify(token: str):
     """
     Verify a JWT token.
-    
+
     - Used by API Gateway to validate requests
     - Returns user info if valid
+
+    NOTE: This endpoint will be migrated to API Gateway in the future
     """
     payload = verify_token(token)
 
@@ -172,7 +177,7 @@ async def verify(token: str):
     # Don't accept refresh tokens for verification
     if payload.get("type") == "refresh":
         return VerifyResponse(valid=False)
-    
+
     return VerifyResponse(
         valid=True,
         user_id=payload["user_id"],
