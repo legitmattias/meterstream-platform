@@ -242,9 +242,9 @@ deploy-nats-staging:
 #   - NATS must be running
 deploy-ingestion-staging:
   extends: .deploy-base
-  # needs:
-  #   - job: build-ingestion
-  #     optional: true  # Can deploy even if build was skipped
+  needs:
+    - job: build-ingestion
+      optional: true  # Can deploy even if build was skipped
   script:
     # Apply manifests (service, deployment)
     - kubectl apply -f k8s/ingestion/ -n meterstream
@@ -255,8 +255,13 @@ deploy-ingestion-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "development"'
-      when: manual  # Always manual (requires NATS to be running)
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/ingestion/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
 
 # ------------------------------------------------------------------------------
 # Deploy: Auth Service
@@ -278,9 +283,9 @@ deploy-ingestion-staging:
 #   - Verifies /ready endpoint (MongoDB connection check)
 deploy-auth-staging:
   extends: .deploy-base
-  # needs:
-  #   - job: build-auth
-  #     optional: true  # Can deploy even if build was skipped
+  needs:
+    - job: build-auth
+      optional: true  # Can deploy even if build was skipped
   script:
     # Apply all manifests (secret, configmap, service, deployment)
     - kubectl apply -f k8s/auth/ -n meterstream
@@ -309,8 +314,13 @@ deploy-auth-staging:
 
       echo "✅ Auth service is healthy and ready!"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "development"'
-      when: manual  # Always manual (requires MongoDB to be running)
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/auth/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
 
 
 
