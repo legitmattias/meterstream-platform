@@ -109,13 +109,14 @@ variables:
       }
       EOF
     # Build and push Docker image
-    - /kaniko/executor
-      --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}"
-      --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile"
-      --destination "${IMAGE_BASE}/${SERVICE_NAME}:${TAG}"      # Tag with commit SHA
-      --destination "${IMAGE_BASE}/${SERVICE_NAME}:latest"      # Tag with "latest"
-      --cache=true                                               # Enable layer caching
-      --cache-ttl=168h                                           # Cache for 7 days
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}" \
+        --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile" \
+        --destination "${IMAGE_BASE}/${SERVICE_NAME}:${TAG}" \
+        --destination "${IMAGE_BASE}/${SERVICE_NAME}:latest" \
+        --cache=true \
+        --cache-ttl=168h
   rules:
     # Manual trigger only during early development
     # TODO: Enable auto-trigger when stable:
