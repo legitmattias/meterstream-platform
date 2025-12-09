@@ -66,7 +66,7 @@ async def root():
 
 @app.get("/health")
 async def health(response_model=HealthResponse):
-    """Health check endpoint for Kubernetes liveness probe."""
+    """Liveness probe - always returns OK if service is running."""
     return HealthResponse()
 
 

@@ -5,7 +5,7 @@ metadata:
   labels:
     app: auth
 spec:
-  replicas: 2 # two replicas
+  replicas: 1 # one replica for now???
   selector:
     matchLabels:
       app: auth
