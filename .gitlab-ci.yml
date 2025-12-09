@@ -278,9 +278,9 @@ deploy-ingestion-staging:
 #   - Verifies /ready endpoint (MongoDB connection check)
 deploy-auth-staging:
   extends: .deploy-base
-  needs:
-    - job: build-auth
-      optional: true  # Can deploy even if build was skipped
+  # needs:
+  #   - job: build-auth
+  #     optional: true  # Can deploy even if build was skipped
   script:
     # Apply all manifests (secret, configmap, service, deployment)
     - kubectl apply -f k8s/auth/ -n meterstream
