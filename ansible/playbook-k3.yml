@@ -8,7 +8,7 @@
     - name: Ensure Terraform outputs are available
       command: terraform output -json
       args:
-        chdir: ./infra
+        chdir: "{{ playbook_dir }}/../infra"
       register: tf_outputs
       changed_when: false
       failed_when: tf_outputs.rc != 0
