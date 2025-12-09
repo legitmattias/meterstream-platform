@@ -1,8 +1,11 @@
 """Auth Service - handles user authentication with JWT tokens."""
 
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from .config import get_settings
 from .mongodb import mongodb
@@ -16,7 +19,12 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-#==============================
+#=======================================
+
+#=============== RATE LIMITING ===============
+# Create limiter instance
+limiter = Limiter(key_func=get_remote_address)
+#=============================================
 
 
 @asynccontextmanager
@@ -35,6 +43,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Add rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Include routes
 app.include_router(auth_router)

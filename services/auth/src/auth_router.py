@@ -1,7 +1,9 @@
 import logging
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from datetime import datetime, UTC
 from bson import ObjectId
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from .models import (
     UserRegister,
@@ -25,9 +27,13 @@ from .mongodb import get_users_collection
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Rate limiter instance
+limiter = Limiter(key_func=get_remote_address)
+
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserRegister, users=Depends(get_users_collection)):
+@limiter.limit("5/minute")  # Max 5 registrations per minute per IP
+async def register(request: Request, user_data: UserRegister, users=Depends(get_users_collection)):
     """
     Register a new user.
     
@@ -69,7 +75,8 @@ async def register(user_data: UserRegister, users=Depends(get_users_collection))
 
 
 @router.post("/login", response_model=TokenPairResponse)
-async def login(user_data: UserLogin, users=Depends(get_users_collection)):
+@limiter.limit("10/minute")  # Max 10 login attempts per minute per IP
+async def login(request: Request, user_data: UserLogin, users=Depends(get_users_collection)):
     """
     Login and receive JWT token.
     
@@ -112,7 +119,8 @@ async def login(user_data: UserLogin, users=Depends(get_users_collection)):
     )
 
 @router.post("/refresh", response_model=TokenPairResponse)
-async def refresh(token_data: RefreshTokenRequest, users=Depends(get_users_collection)):
+@limiter.limit("20/minute")  # Max 20 refresh requests per minute per IP
+async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depends(get_users_collection)):
     """
     Get new access token using refresh token.
     """
