@@ -7,7 +7,9 @@ from src.jwt_service import (
     hash_password,
     verify_password,
     create_access_token,
-    verify_token
+    verify_token,
+    create_refresh_token,
+    verify_refresh_token
 )
 
 
@@ -107,3 +109,86 @@ class TestJWTTokens:
 
         # Should be around 60 minutes (3600 seconds) by default
         assert expires_in == 3600
+
+    def test_token_with_customer_id(self):
+        """Test creating and verifying token with customer_id."""
+        user_id = "507f1f77bcf86cd799439011"
+        email = "test@example.com"
+        role = "user"
+        customer_id = "customer-123"
+
+        token, _ = create_access_token(user_id, email, role, customer_id)
+        payload = verify_token(token)
+
+        assert payload is not None
+        assert payload["user_id"] == user_id
+        assert payload["email"] == email
+        assert payload["role"] == role
+        assert payload["customer_id"] == customer_id
+
+    def test_token_without_customer_id(self):
+        """Test token works without customer_id (None)."""
+        user_id = "507f1f77bcf86cd799439011"
+        email = "test@example.com"
+        role = "user"
+
+        token, _ = create_access_token(user_id, email, role)
+        payload = verify_token(token)
+
+        assert payload is not None
+        assert payload["user_id"] == user_id
+        assert payload["customer_id"] is None
+
+
+class TestRefreshTokens:
+    """Tests for refresh token functions."""
+
+    def test_create_refresh_token(self):
+        """Test creating a refresh token."""
+        user_id = "507f1f77bcf86cd799439011"
+
+        token = create_refresh_token(user_id)
+
+        assert isinstance(token, str)
+        assert len(token) > 50  # JWT tokens are long
+
+    def test_verify_valid_refresh_token(self):
+        """Test verifying a valid refresh token."""
+        user_id = "507f1f77bcf86cd799439011"
+
+        token = create_refresh_token(user_id)
+        verified_user_id = verify_refresh_token(token)
+
+        assert verified_user_id is not None
+        assert verified_user_id == user_id
+
+    def test_verify_invalid_refresh_token(self):
+        """Test verifying an invalid refresh token."""
+        invalid_token = "invalid.refresh.token"
+        user_id = verify_refresh_token(invalid_token)
+
+        assert user_id is None
+
+    def test_verify_tampered_refresh_token(self):
+        """Test verifying a tampered refresh token."""
+        user_id = "507f1f77bcf86cd799439011"
+
+        token = create_refresh_token(user_id)
+        tampered_token = token[:-5] + "XXXXX"
+        verified_user_id = verify_refresh_token(tampered_token)
+
+        assert verified_user_id is None
+
+    def test_access_token_rejected_as_refresh_token(self):
+        """Test that access token is rejected when verifying as refresh token."""
+        user_id = "507f1f77bcf86cd799439011"
+        email = "test@example.com"
+        role = "user"
+
+        # Create an access token
+        access_token, _ = create_access_token(user_id, email, role)
+
+        # Try to verify it as refresh token - should fail
+        verified_user_id = verify_refresh_token(access_token)
+
+        assert verified_user_id is None

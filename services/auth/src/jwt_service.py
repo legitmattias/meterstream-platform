@@ -33,9 +33,9 @@ def create_access_token(user_id: str, email: str, role: str, customer_id: Option
     expire = now + expires_delta
 
     payload = {
-        "sub": user_id,           # authentication (who are you)
+        "sub": user_id,           # authentication (who are you) mongoDB ID
         "email": email,
-        "customer_id": customer_id, # data scoping (what can you see)
+        "customer_id": customer_id, # data scoping (what can you see) Data-acess in influxDB
         "role": role,             # authorization (what can you do)
         "exp": expire,            # expiration time
         "iat": now                # issued at
