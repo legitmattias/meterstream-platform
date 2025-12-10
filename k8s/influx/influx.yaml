@@ -23,31 +23,36 @@ spec:
         ports:
         - containerPort: 8086
         env:
-        - name: DOCKER_INFLUXDB_INIT_MODE
+        - name: INFLUXDB_INIT_MODE
           valueFrom:
             configMapKeyRef:
               name: influxdb-config
               key: init-mode
-        - name: DOCKER_INFLUXDB_INIT_USERNAME
+        - name: INFLUXDB_INIT_USERNAME
           valueFrom:
             secretKeyRef:
               name: influxdb-credentials
               key: admin-username
-        - name: DOCKER_INFLUXDB_INIT_PASSWORD
+        - name: INFLUXDB_INIT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: influxdb-credentials
               key: admin-password
-        - name: DOCKER_INFLUXDB_INIT_ORG
+        - name: INFLUXDB_INIT_ORG
           valueFrom:
             configMapKeyRef:
               name: influxdb-config
               key: org
-        - name: DOCKER_INFLUXDB_INIT_BUCKET
+        - name: INFLUXDB_INIT_BUCKET
           valueFrom:
             configMapKeyRef:
               name: influxdb-config
               key: bucket
+        - name: INFLUXDB_INIT_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-credentials
+              key: admin-token
         volumeMounts:
         - name: influxdb-storage
           mountPath: /var/lib/influxdb2
