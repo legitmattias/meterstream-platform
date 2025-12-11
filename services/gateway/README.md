@@ -26,6 +26,24 @@ cp .env.example .env
 uvicorn src.main:app --reload
 ```
 
+## Testing
+
+```bash
+cd services/gateway
+source .venv/bin/activate
+
+# Run all tests
+JWT_SECRET=test-secret pytest -v
+
+# Run specific test file
+JWT_SECRET=test-secret pytest tests/test_middleware.py -v
+
+# Run with coverage (requires pytest-cov)
+JWT_SECRET=test-secret pytest --cov=src --cov-report=term-missing
+```
+
+Note: `JWT_SECRET` environment variable is required even for tests.
+
 ## API
 
 ### Routes
