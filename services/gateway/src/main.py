@@ -1,6 +1,8 @@
 """API Gateway - JWT validation and request proxying to backend services."""
 
 import logging
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -23,21 +25,27 @@ class HealthResponse(BaseModel):
     status: str = "ok"
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan manager - handles startup and shutdown."""
+    logger.info("Starting API Gateway")
+    _app.state.http_client = httpx.AsyncClient(timeout=30.0)
+    yield
+    logger.info("Shutting down API Gateway")
+    await _app.state.http_client.aclose()
+
+
 app = FastAPI(
     title="API Gateway",
     description="JWT validation and request routing to backend services",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
-# HTTP client for proxying requests
-http_client = httpx.AsyncClient(timeout=30.0)
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up HTTP client on shutdown."""
-    await http_client.aclose()
+def get_http_client() -> httpx.AsyncClient:
+    """Get the HTTP client from app state."""
+    return app.state.http_client
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -83,7 +91,7 @@ async def proxy_request(
     body = await request.body()
 
     try:
-        response = await http_client.request(
+        response = await get_http_client().request(
             method=request.method,
             url=target_url,
             headers=headers,
