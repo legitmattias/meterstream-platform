@@ -23,30 +23,74 @@ spec:
             - containerPort: 8000
               name: http
           env:
-            - name: MONGODB_URL
+            # MongoDB connection credentials (from secrets)
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGODB_USERNAME
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGODB_PASSWORD
+
+            # MongoDB connection details (from configmap)
+            - name: MONGODB_HOST
               valueFrom:
                 configMapKeyRef:
                   name: auth-config
-                  key: mongodb_url
+                  key: mongodb_host
+            - name: MONGODB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: mongodb_port
             - name: DATABASE_NAME
-              value: "meterstream_auth"
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: mongodb_database
+
+            # Construct MongoDB URL from credentials
+            - name: MONGODB_URL
+              value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@$(MONGODB_HOST):$(MONGODB_PORT)"
+
+            # JWT Configuration (secret and config)
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: auth-secret
-                  key: jwt_secret
+                  name: jwt-secret
+                  key: JWT_SECRET
             - name: JWT_ALGORITHM
-              value: "HS256"
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: jwt_algorithm
             - name: JWT_EXPIRE_MINUTES
-              value: "60"
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: jwt_expire_minutes
             - name: JWT_REFRESH_EXPIRE_DAYS
-              value: "7"
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: jwt_refresh_expire_days
+
+            # Service Configuration
             - name: SERVICE_NAME
-              value: "auth-service"
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: service_name
             - name: DEBUG
               value: "false"
             - name: LOG_LEVEL
-              value: "INFO"
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: log_level
           resources:
             requests:
               memory: "128Mi"
