@@ -208,8 +208,8 @@ deploy-mongodb-staging:
     # Create MongoDB secret from CI/CD variables
     - |
       kubectl -n meterstream create secret generic mongodb-secret \
-        --from-literal=MONGODB_USERNAME="$MONGODB_USERNAME" \
-        --from-literal=MONGODB_PASSWORD="$MONGODB_PASSWORD_STAGING" \
+        --from-literal=username="$MONGODB_USERNAME" \
+        --from-literal=password="$MONGODB_PASSWORD_STAGING" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Apply MongoDB manifests (service, statefulset)
