@@ -217,8 +217,18 @@ deploy-mongodb-staging:
     - kubectl apply -f k8s/mongoDB/service.yaml -n meterstream
     - kubectl apply -f k8s/mongoDB/statefulset.yaml -n meterstream
 
-    # Wait for StatefulSet to be ready (max 2 minutes)
-    - kubectl -n meterstream rollout status statefulset/mongodb --timeout=120s
+    # Debug: Show pod status
+    - echo "Checking pod status..."
+    - kubectl -n meterstream get pods -l app=mongodb
+    - kubectl -n meterstream get pvc
+
+    # Wait for StatefulSet to be ready (max 3 minutes to account for increased initialDelaySeconds)
+    - kubectl -n meterstream rollout status statefulset/mongodb --timeout=180s || (
+        echo "MongoDB failed to become ready. Debugging...";
+        kubectl -n meterstream describe pod -l app=mongodb;
+        kubectl -n meterstream logs -l app=mongodb --tail=50;
+        exit 1
+      )
   rules:
     # Manual trigger only during early development
     # TODO: Enable auto-trigger when stable:
