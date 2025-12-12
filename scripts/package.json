@@ -1,0 +1,8 @@
+{
+  "name": "meterstream-scripts",
+  "version": "1.0.0",
+  "description": "Utility scripts for MeterStream",
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  }
+}
