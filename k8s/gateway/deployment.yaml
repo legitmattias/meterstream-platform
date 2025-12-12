@@ -25,7 +25,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: jwt-secret
-                  key: secret
+                  key: JWT_SECRET
             - name: AUTH_SERVICE_URL
               value: "http://auth:8000"
             - name: INGESTION_SERVICE_URL

@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token clean
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token peek-kafka clean
 
 help:
 	@echo "MeterStream Development Commands"
@@ -35,6 +35,7 @@ help:
 	@echo "Testing:"
 	@echo "  make producer-run    Run the test data producer"
 	@echo "  make generate-token  Generate a test JWT token"
+	@echo "  make peek-kafka      Peek at Kalmar Energi Team 1's Kafka stream"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean         Remove all containers and volumes"
@@ -120,6 +121,11 @@ generate-token:
 	cd services/gateway && \
 	source .venv/bin/activate && \
 	python ../../scripts/generate_test_token.py --decode
+
+# Peek at Kalmar Energi Team 1's Kafka stream
+peek-kafka:
+	@test -d scripts/node_modules || (cd scripts && npm install)
+	cd scripts && node peek_kalmar1_kafka.js
 
 # Cleanup
 clean:
