@@ -19,48 +19,47 @@ spec:
         ports:
         - containerPort: 8086
         env:
-        - name: INFLUXDB_INIT_MODE
+        - name: DOCKER_INFLUXDB_INIT_MODE
           valueFrom:
             secretKeyRef:
               name: influxdb-init
-              key: INFLUXDB_INIT_MODE
-        - name: INFLUXDB_INIT_USERNAME
+              key: DOCKER_INFLUXDB_INIT_MODE
+        - name: DOCKER_INFLUXDB_INIT_USERNAME
           valueFrom:
             secretKeyRef:
               name: influxdb-init
-              key: INFLUXDB_INIT_USERNAME
-        - name: INFLUXDB_INIT_PASSWORD
+              key: DOCKER_INFLUXDB_INIT_USERNAME
+        - name: DOCKER_INFLUXDB_INIT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: influxdb-init
-              key: INFLUXDB_INIT_PASSWORD
-        - name: INFLUXDB_INIT_ORG
+              key: DOCKER_INFLUXDB_INIT_PASSWORD
+        - name: DOCKER_INFLUXDB_INIT_ORG
           valueFrom:
             secretKeyRef:
               name: influxdb-init
-              key: INFLUXDB_INIT_ORG
-        - name: INFLUXDB_INIT_BUCKET
+              key: DOCKER_INFLUXDB_INIT_ORG
+        - name: DOCKER_INFLUXDB_INIT_BUCKET
           valueFrom:
             secretKeyRef:
               name: influxdb-init
-              key: INFLUXDB_INIT_BUCKET
-        - name: INFLUXDB_INIT_ADMIN_TOKEN
+              key: DOCKER_INFLUXDB_INIT_BUCKET
+        - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
           valueFrom:
             secretKeyRef:
               name: influxdb-init
-              key: INFLUXDB_INIT_ADMIN_TOKEN
-        - name: INFLUXDB_INIT_RETENTION
+              key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+        - name: DOCKER_INFLUXDB_INIT_RETENTION
           valueFrom:
             secretKeyRef:
               name: influxdb-init
-              key: INFLUXDB_INIT_RETENTION
+              key: DOCKER_INFLUXDB_INIT_RETENTION
         volumeMounts:
         - name: influxdb-storage
           mountPath: /var/lib/influxdb2
   volumeClaimTemplates:
   - metadata:
       name: influxdb-storage
-    spec:
       accessModes: ["ReadWriteOnce"]
       resources:
         requests:
