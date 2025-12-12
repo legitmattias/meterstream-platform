@@ -1,5 +1,7 @@
 stages:
   - test-connection
+  - build
+  - deploy-staging
 
 test-staging-connection:
   stage: test-connection
@@ -14,18 +16,118 @@ test-staging-connection:
   rules:
     - when: manual
 
-test-production-connection:
-  stage: test-connection
+# test-production-connection:
+#   stage: test-connection
+#   image:
+#     name: bitnami/kubectl:latest
+#     entrypoint: [""]
+#   script:
+#     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+#     - export KUBECONFIG=$PWD/kubeconfig
+#     - kubectl config current-context
+#     - kubectl get nodes
+#   rules:
+#     - when: always
+
+variables:
+  IMAGE_BASE: ${CI_REGISTRY_IMAGE}
+  TAG: ${CI_COMMIT_SHORT_SHA}
+
+# ------------------------------
+# Build Template
+# ------------------------------
+.build:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "$CI_REGISTRY": {
+            "username": "$CI_REGISTRY_USER",
+            "password": "$CI_REGISTRY_PASSWORD"
+          }
+        }
+      }
+      EOF
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}"
+      --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile"
+      --destination "${IMAGE_BASE}/${SERVICE_NAME}:${TAG}"
+      --destination "${IMAGE_BASE}/${SERVICE_NAME}:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "development"'
+    - when: manual
+
+build-ingestion:
+  extends: .build
+  variables:
+    SERVICE_NAME: ingestion
+
+# ------------------------------
+# Deploy NATS to Staging
+# ------------------------------
+deploy-nats-staging:
+  stage: deploy-staging
   image:
     name: bitnami/kubectl:latest
     entrypoint: [""]
   script:
-    - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+    - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
     - export KUBECONFIG=$PWD/kubeconfig
+    
+    # Sanity check
     - kubectl config current-context
     - kubectl get nodes
+    - kubectl create namespace meterstream || true
+
+    # Apply K8s manifests
+    - kubectl apply -f k8s/nats/ -n meterstream
+
+    # Wait for rollout
+    - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
+  environment:
+    name: staging
   rules:
-    - when: manual
+    - if: '$CI_COMMIT_BRANCH == "development"'
+      when: manual
+
+# ------------------------------
+# Deploy Ingestion to Staging (Manual)
+# ------------------------------
+deploy-ingestion-staging:
+  stage: deploy-staging
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  needs:
+    - build-ingestion
+  script:
+    - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG=$PWD/kubeconfig
+
+    # Sanity check
+    - kubectl config current-context
+    - kubectl get nodes
+    - kubectl create namespace meterstream || true
+    # Apply K8s manifests
+    - kubectl apply -f k8s/ingestion/ -n meterstream
+
+    # Update image
+    - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
+
+    # Wait for rollout
+    - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
+  environment:
+    name: staging
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "development"'
+      when: manual
+
 # stages:
 #   - build
 #   - deploy-staging
