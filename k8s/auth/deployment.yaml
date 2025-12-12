@@ -20,7 +20,7 @@ spec:
         - name: auth
           image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/auth:latest
           ports:
-            - containerPort: 8001
+            - containerPort: 8000
               name: http
           env:
             - name: MONGODB_URL
@@ -57,14 +57,14 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8001
+              port: 8000
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /ready
-              port: 8001
+              port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5

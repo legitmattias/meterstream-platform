@@ -346,8 +346,6 @@ elif role in ["admin", "internal"]:
 - ✅ Endpoints: /login, /register
 - ✅ K8s service name: `auth`
 
-**Team Decision Needed:**
-- When do we make the port change? (Breaks current deployments)
 
 ---
 

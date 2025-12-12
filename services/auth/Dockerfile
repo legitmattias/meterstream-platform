@@ -14,4 +14,4 @@ EXPOSE 8001
 
 # Set Python path and run
 ENV PYTHONPATH=/app
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
