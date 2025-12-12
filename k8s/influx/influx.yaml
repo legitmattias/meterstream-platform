@@ -1,40 +1,3 @@
-apiVersion: v1
-metadata:
-  name: influxdb
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: influxdb-credentials
-type: Opaque
-stringData:
-  admin-username: admin
-  admin-password: admin123
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: influxdb-config
-data:
-  init-mode: setup
-  org: team-org
-  bucket: raw-data
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: influxdb-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -56,31 +19,41 @@ spec:
         ports:
         - containerPort: 8086
         env:
-        - name: DOCKER_INFLUXDB_INIT_MODE
-          valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: init-mode
-        - name: DOCKER_INFLUXDB_INIT_USERNAME
+        - name: INFLUXDB_INIT_MODE
           valueFrom:
             secretKeyRef:
-              name: influxdb-credentials
-              key: admin-username
-        - name: DOCKER_INFLUXDB_INIT_PASSWORD
+              name: influxdb-init
+              key: INFLUXDB_INIT_MODE
+        - name: INFLUXDB_INIT_USERNAME
           valueFrom:
             secretKeyRef:
-              name: influxdb-credentials
-              key: admin-password
-        - name: DOCKER_INFLUXDB_INIT_ORG
+              name: influxdb-init
+              key: INFLUXDB_INIT_USERNAME
+        - name: INFLUXDB_INIT_PASSWORD
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: org
-        - name: DOCKER_INFLUXDB_INIT_BUCKET
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_PASSWORD
+        - name: INFLUXDB_INIT_ORG
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: bucket
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_ORG
+        - name: INFLUXDB_INIT_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_BUCKET
+        - name: INFLUXDB_INIT_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_ADMIN_TOKEN
+        - name: INFLUXDB_INIT_RETENTION
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_RETENTION
         volumeMounts:
         - name: influxdb-storage
           mountPath: /var/lib/influxdb2
