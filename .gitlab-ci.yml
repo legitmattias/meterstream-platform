@@ -146,12 +146,12 @@ build-auth:
 # ------------------------------------------------------------------------------
 # Build: Processor Service
 # ------------------------------------------------------------------------------
-build-processor:
-  extends: .build
-  variables:
-    SERVICE_NAME: processor  # Builds from services/processor/
+# build-processor:
+#   extends: .build
+#   variables:
+#     SERVICE_NAME: processor  # Builds from services/processor/
 
-# ------------------------------------------------------------------------------
+# # ------------------------------------------------------------------------------
 # Build: Gateway Service
 # ------------------------------------------------------------------------------
 build-gateway:
@@ -197,7 +197,7 @@ build-gateway:
 # Deploys MongoDB StatefulSet with persistent storage
 #
 # What it deploys:
-#   - Secret: MongoDB credentials
+#   - Secret: MongoDB credentials (from CI/CD variables)
 #   - Service: Headless service for StatefulSet
 #   - StatefulSet: MongoDB with persistent volume
 #
@@ -205,8 +205,17 @@ build-gateway:
 deploy-mongodb-staging:
   extends: .deploy-base
   script:
-    # Apply all MongoDB manifests (secret, service, statefulset)
-    - kubectl apply -f k8s/mongoDB/ -n meterstream
+    # Create MongoDB secret from CI/CD variables
+    - |
+      kubectl -n meterstream create secret generic mongodb-secret \
+        --from-literal=MONGODB_USERNAME="$MONGODB_USERNAME" \
+        --from-literal=MONGODB_PASSWORD="$MONGODB_PASSWORD_STAGING" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Apply MongoDB manifests (service, statefulset)
+    # Note: Skipping k8s/mongoDB/secret.yaml since we create it dynamically above
+    - kubectl apply -f k8s/mongoDB/service.yaml -n meterstream
+    - kubectl apply -f k8s/mongoDB/statefulset.yaml -n meterstream
 
     # Wait for StatefulSet to be ready (max 2 minutes)
     - kubectl -n meterstream rollout status statefulset/mongodb --timeout=120s
@@ -256,12 +265,14 @@ deploy-nats-staging:
 #
 # Depends on:
 #   - build-ingestion (optional) - Uses new image if built, otherwise uses latest
-#   - NATS must be running
+#   - NATS must be running (required)
 deploy-ingestion-staging:
   extends: .deploy-base
   needs:
     - job: build-ingestion
       optional: true  # Can deploy even if build was skipped
+    - job: deploy-nats-staging
+      optional: false  # NATS must be deployed first
   script:
     # Apply manifests (service, deployment)
     - kubectl apply -f k8s/ingestion/ -n meterstream
@@ -293,7 +304,7 @@ deploy-ingestion-staging:
 #
 # Depends on:
 #   - build-auth (optional) - Uses new image if built, otherwise uses latest
-#   - MongoDB must be running
+#   - MongoDB must be running (required)
 #
 # Post-deployment:
 #   - Verifies /health endpoint (liveness check)
@@ -303,9 +314,20 @@ deploy-auth-staging:
   needs:
     - job: build-auth
       optional: true  # Can deploy even if build was skipped
+    - job: deploy-mongodb-staging
+      optional: false  # MongoDB must be deployed first
   script:
-    # Apply all manifests (secret, configmap, service, deployment)
-    - kubectl apply -f k8s/auth/ -n meterstream
+    # Create JWT secret from CI/CD variables (shared with Gateway)
+    - |
+      kubectl -n meterstream create secret generic jwt-secret \
+        --from-literal=JWT_SECRET="$JWT_SECRET_STAGING" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Apply manifests (configmap, service, deployment)
+    # Note: Skipping k8s/auth/secret.yaml since we create it dynamically above
+    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
+    - kubectl apply -f k8s/auth/service.yaml -n meterstream
+    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
 
     # Update deployment to use newly built image
     - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
@@ -386,12 +408,14 @@ deploy-processor-staging:
 #
 # Depends on:
 #   - build-gateway (optional) - Uses new image if built, otherwise uses latest
-#   - Auth service must be running
+#   - Auth service must be running (required)
 deploy-gateway-staging:
   extends: .deploy-base
   needs:
     - job: build-gateway
       optional: true  # Can deploy even if build was skipped
+    - job: deploy-auth-staging
+      optional: false  # Auth service must be deployed first
   script:
     # Apply manifests (secret, service, deployment)
     - kubectl apply -f k8s/gateway/ -n meterstream
@@ -410,7 +434,45 @@ deploy-gateway-staging:
     #       - .gitlab-ci.yml
     - when: manual  # Always manual for now
 
+# ------------------------------------------------------------------------------
+# Deploy: InfluxDB Time-Series Database
+# ------------------------------------------------------------------------------
+# Deploys InfluxDB StatefulSet for time-series data storage
+#
+# What it deploys:
+#   - Secret: InfluxDB initialization credentials (from CI/CD variables)
+#   - Service: InfluxDB service for client connections
+#   - StatefulSet: InfluxDB with persistent storage
+#
+# Note: Uses StatefulSet (not Deployment) because InfluxDB needs stable storage
+deploy-influx-staging:
+  extends: .deploy-base
+  script:
+    # Create InfluxDB initialization secret from CI/CD variables
+    - |
+      kubectl -n meterstream create secret generic influxdb-init \
+        --from-literal=INFLUXDB_INIT_MODE="$STAG_INFLUXDB_INIT_MODE" \
+        --from-literal=INFLUXDB_INIT_USERNAME="$STAG_INFLUXDB_INIT_USERNAME" \
+        --from-literal=INFLUXDB_INIT_PASSWORD="$STAG_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=INFLUXDB_INIT_ORG="$STAG_INFLUXDB_INIT_ORG" \
+        --from-literal=INFLUXDB_INIT_BUCKET="$STAG_INFLUXDB_INIT_BUCKET" \
+        --from-literal=INFLUXDB_INIT_ADMIN_TOKEN="$STAG_INFLUXDB_INIT_ADMIN_TOKEN" \
+        --from-literal=INFLUXDB_INIT_RETENTION="$STAG_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
 
+    # Apply InfluxDB manifests
+    - kubectl -n meterstream apply -f k8s/influx/influx.yaml
+
+    # Wait for StatefulSet to be ready (max 3 minutes)
+    - kubectl -n meterstream rollout status statefulset/influxdb --timeout=180s
+  rules:
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/influx/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
 
 
 # ------------------------------
