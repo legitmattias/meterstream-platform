@@ -122,10 +122,10 @@ generate-token:
 	source .venv/bin/activate && \
 	python ../../scripts/generate_test_token.py --decode
 
-# Peek at Kalmar Energi Team 1's Kafka stream (requires: cd scripts && npm install)
+# Peek at Kalmar Energi Team 1's Kafka stream
 peek-kafka:
-	cd scripts && \
-	node peek_kalmar1_kafka.js
+	@test -d scripts/node_modules || (cd scripts && npm install)
+	cd scripts && node peek_kalmar1_kafka.js
 
 # Cleanup
 clean:
