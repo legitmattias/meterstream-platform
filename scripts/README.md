@@ -30,6 +30,48 @@ python produce_test_data.py --file ../data/test_data_medium.csv --batch-size 200
 - `--rate` - Batches per second (default: 10, 0 = unlimited)
 - `--limit` - Max readings to send (default: 0 = all)
 
+## generate_test_token.py
+
+Generates JWT tokens for testing the API Gateway.
+
+```bash
+# Generate token with defaults
+python generate_test_token.py
+
+# Generate and show decoded payload
+python generate_test_token.py --decode
+
+# Custom user and role
+python generate_test_token.py --user-id user-456 --role admin --decode
+
+# Token without customer_id
+python generate_test_token.py --customer-id none --decode
+
+# Short-lived token (for testing expiration)
+python generate_test_token.py --expires 0 --decode
+
+# Custom secret (must match gateway's JWT_SECRET)
+python generate_test_token.py --secret my-secret --decode
+```
+
+**Options:**
+- `--user-id` - User identifier (default: test-user-123)
+- `--role` - User role: customer, internal, admin (default: customer)
+- `--customer-id` - Customer ID, use "none" to omit (default: cust-456)
+- `--expires` - Token validity in hours (default: 24)
+- `--secret` - JWT signing secret (default: test-secret-for-local-dev)
+- `--decode` - Also print the decoded payload
+
+**Usage with gateway:**
+```bash
+# Terminal 1: Start gateway with matching secret
+JWT_SECRET=test-secret-for-local-dev uvicorn src.main:app --reload
+
+# Terminal 2: Generate token and test
+TOKEN=$(python generate_test_token.py | head -1 | cut -d' ' -f2)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/ingest
+```
+
 ## nats_status.py
 
 Shows NATS JetStream status (requires port-forward to NATS monitor port).

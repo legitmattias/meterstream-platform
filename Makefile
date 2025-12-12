@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw ingestion-run ingestion-test ingestion-lint producer-run clean
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw ingestion-run ingestion-test ingestion-lint gateway-run gateway-test gateway-lint producer-run generate-token clean
 
 help:
 	@echo "MeterStream Development Commands"
@@ -19,8 +19,14 @@ help:
 	@echo "  make ingestion-test  Run ingestion service tests"
 	@echo "  make ingestion-lint  Run linter on ingestion service"
 	@echo ""
+	@echo "Gateway Service:"
+	@echo "  make gateway-run     Run the API gateway locally"
+	@echo "  make gateway-test    Run gateway tests"
+	@echo "  make gateway-lint    Run linter on gateway"
+	@echo ""
 	@echo "Testing:"
 	@echo "  make producer-run    Run the test data producer"
+	@echo "  make generate-token  Generate a test JWT token"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean         Remove all containers and volumes"
@@ -59,10 +65,32 @@ ingestion-lint:
 	source .venv/bin/activate && \
 	pylint src/ tests/
 
+# Gateway Service
+gateway-run:
+	cd services/gateway && \
+	source .venv/bin/activate && \
+	JWT_SECRET=test-secret-for-local-dev uvicorn src.main:app --reload
+
+gateway-test:
+	cd services/gateway && \
+	source .venv/bin/activate && \
+	JWT_SECRET=test-secret pytest tests/ -v
+
+gateway-lint:
+	cd services/gateway && \
+	source .venv/bin/activate && \
+	pylint src/ tests/
+
 # Test data producer
 producer-run:
 	cd scripts && \
 	python3 produce_test_data.py --url http://localhost:8000 --limit 100
+
+# Generate test JWT token
+generate-token:
+	cd services/gateway && \
+	source .venv/bin/activate && \
+	python ../../scripts/generate_test_token.py --decode
 
 # Cleanup
 clean:
