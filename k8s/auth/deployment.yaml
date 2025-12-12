@@ -28,12 +28,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: mongodb-secret
-                  key: MONGODB_USERNAME
+                  key: username
             - name: MONGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mongodb-secret
-                  key: MONGODB_PASSWORD
+                  key: password
 
             # MongoDB connection details (from configmap)
             - name: MONGODB_HOST

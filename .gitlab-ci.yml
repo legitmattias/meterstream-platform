@@ -205,7 +205,9 @@ build-gateway:
 deploy-mongodb-staging:
   extends: .deploy-base
   script:
-    # Create MongoDB secret from CI/CD variables
+    # Note: MongoDB credentials are created ONCE manually or on first deploy
+
+    # Create/Update MongoDB secret from CI/CD variables (only if it doesn't exist or needs update)
     - |
       kubectl -n meterstream create secret generic mongodb-secret \
         --from-literal=username="$MONGODB_USERNAME" \
@@ -213,16 +215,15 @@ deploy-mongodb-staging:
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Apply MongoDB manifests (service, statefulset)
-    # Note: Skipping k8s/mongoDB/secret.yaml since we create it dynamically above
     - kubectl apply -f k8s/mongoDB/service.yaml -n meterstream
     - kubectl apply -f k8s/mongoDB/statefulset.yaml -n meterstream
 
     # Debug: Show pod status
-    - echo "Checking pod status..."
+    - echo "Checking MongoDB status..."
     - kubectl -n meterstream get pods -l app=mongodb
-    - kubectl -n meterstream get pvc
+    - kubectl -n meterstream get pvc mongodb-data-mongodb-0
 
-    # Wait for StatefulSet to be ready (max 3 minutes to account for increased initialDelaySeconds)
+    # Wait for StatefulSet to be ready (max 3 minutes to account for initialDelaySeconds=30s)
     - kubectl -n meterstream rollout status statefulset/mongodb --timeout=180s || (
         echo "MongoDB failed to become ready. Debugging...";
         kubectl -n meterstream describe pod -l app=mongodb;
@@ -461,13 +462,13 @@ deploy-influx-staging:
     # Create InfluxDB initialization secret from CI/CD variables
     - |
       kubectl -n meterstream create secret generic influxdb-init \
-        --from-literal=INFLUXDB_INIT_MODE="$STAG_INFLUXDB_INIT_MODE" \
-        --from-literal=INFLUXDB_INIT_USERNAME="$STAG_INFLUXDB_INIT_USERNAME" \
-        --from-literal=INFLUXDB_INIT_PASSWORD="$STAG_INFLUXDB_INIT_PASSWORD" \
-        --from-literal=INFLUXDB_INIT_ORG="$STAG_INFLUXDB_INIT_ORG" \
-        --from-literal=INFLUXDB_INIT_BUCKET="$STAG_INFLUXDB_INIT_BUCKET" \
-        --from-literal=INFLUXDB_INIT_ADMIN_TOKEN="$STAG_INFLUXDB_INIT_ADMIN_TOKEN" \
-        --from-literal=INFLUXDB_INIT_RETENTION="$STAG_INFLUXDB_INIT_RETENTION" \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$STAG_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$STAG_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$STAG_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$STAG_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$STAG_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$STAG_INFLUXDB_INIT_ADMIN_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$STAG_INFLUXDB_INIT_RETENTION" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Apply InfluxDB manifests
