@@ -30,11 +30,11 @@ spec:
                   key: mongodb_url
             - name: DATABASE_NAME
               value: "meterstream_auth"
-            - name: JWT_SECRET_KEY
+            - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: auth-secret
-                  key: jwt_secret_key
+                  key: jwt_secret
             - name: JWT_ALGORITHM
               value: "HS256"
             - name: JWT_EXPIRE_MINUTES

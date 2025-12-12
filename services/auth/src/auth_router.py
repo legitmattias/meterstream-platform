@@ -1,9 +1,10 @@
 import logging
-from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Header
 from datetime import datetime, UTC
 from bson import ObjectId
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from typing import Optional
 
 from .models import (
     UserRegister,
@@ -154,6 +155,80 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
         expires_in=expires_in
     )
 
+@router.get("/me", response_model=UserResponse)
+@limiter.limit("30/minute")  # Max 30 requests per minute per IP
+async def me(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection)
+):
+    """
+    Get current user information from JWT token.
+
+    - Extracts JWT from Authorization header
+    - Verifies token
+    - Returns current user data
+    """
+    # Check Authorization header exists
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Extract token from "Bearer <token>"
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format. Expected 'Bearer <token>'",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    token = parts[1]
+
+    # Verify token
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Get user from database
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload"
+        )
+
+    try:
+        user = await users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID in token"
+        )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    logger.info("User info retrieved: %s", user["email"])
+
+    return UserResponse(
+        id=str(user["_id"]),
+        email=user["email"],
+        name=user["name"],
+        created_at=user["created_at"],
+        role=user.get("role", "customer"),
+        customer_id=user.get("customer_id")
+    )
 
 # TODO: MIGRATE TO API GATEWAY
 # This endpoint should be moved to the API Gateway service

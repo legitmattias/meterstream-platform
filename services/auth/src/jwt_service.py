@@ -43,7 +43,7 @@ def create_access_token(user_id: str, email: str, role: str, customer_id: Option
     
     token = jwt.encode(
         payload, 
-        settings.jwt_secret_key, 
+        settings.jwt_secret, 
         algorithm=settings.jwt_algorithm
     )
     
@@ -64,7 +64,7 @@ def verify_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(
             token,
-            settings.jwt_secret_key,
+            settings.jwt_secret,
             algorithms=[settings.jwt_algorithm]
         )
         return {
@@ -97,7 +97,7 @@ def create_refresh_token(user_id: str) -> str:
     
     return jwt.encode(
         payload,
-        settings.jwt_secret_key,
+        settings.jwt_secret,
         algorithm=settings.jwt_algorithm
     )
 
@@ -115,7 +115,7 @@ def verify_refresh_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(
             token,
-            settings.jwt_secret_key,
+            settings.jwt_secret,
             algorithms=[settings.jwt_algorithm]
         )
 

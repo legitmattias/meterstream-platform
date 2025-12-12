@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     database_name: str = "meterstream_auth"
 
     # JWT
-    jwt_secret_key: str = "super-secret-key-change-in-production"
+    jwt_secret: str = "super-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     jwt_refresh_expire_days: int = 7
