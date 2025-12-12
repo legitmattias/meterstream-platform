@@ -55,6 +55,8 @@ async def _consume_messages() -> None:
             try:
                 data = json.loads(msg.data.decode("utf-8"))
                 reading = MeterReading(**data)
+                logger.info("Parsed reading: %s %s %s %.3f",
+                            reading.timestamp, reading.customer, reading.area, reading.power_consumption)
 
                 # TODO:
                 # 1) Filtrering (nollor/brus)
@@ -62,6 +64,7 @@ async def _consume_messages() -> None:
                 # 3) Skriv till InfluxDB
 
                 await msg.ack()
+                logger.info("Acked message")
             except Exception as e:
                 logger.warning("Failed to process message (not acked): %s", e)
                 # Lämna o-ackad => JetStream kan redelivera
