@@ -1,7 +1,3 @@
-apiVersion: v1
-metadata:
-  name: influxdb
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -25,34 +21,39 @@ spec:
         env:
         - name: INFLUXDB_INIT_MODE
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: init-mode
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_MODE
         - name: INFLUXDB_INIT_USERNAME
           valueFrom:
             secretKeyRef:
-              name: influxdb-credentials
-              key: admin-username
+              name: influxdb-init
+              key: INFLUXDB_INIT_USERNAME
         - name: INFLUXDB_INIT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: influxdb-credentials
-              key: admin-password
+              name: influxdb-init
+              key: INFLUXDB_INIT_PASSWORD
         - name: INFLUXDB_INIT_ORG
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: org
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_ORG
         - name: INFLUXDB_INIT_BUCKET
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: bucket
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_BUCKET
         - name: INFLUXDB_INIT_ADMIN_TOKEN
           valueFrom:
             secretKeyRef:
-              name: influxdb-credentials
-              key: admin-token
+              name: influxdb-init
+              key: INFLUXDB_INIT_ADMIN_TOKEN
+        - name: INFLUXDB_INIT_RETENTION
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-init
+              key: INFLUXDB_INIT_RETENTION
         volumeMounts:
         - name: influxdb-storage
           mountPath: /var/lib/influxdb2
