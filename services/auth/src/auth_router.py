@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status, Depends, Request, Header
 from datetime import datetime, UTC
 from bson import ObjectId
+from bson.errors import InvalidId
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from typing import Optional
@@ -44,12 +45,20 @@ async def register(request: Request, user_data: UserRegister, users=Depends(get_
     # Check if user already exists
     existing_user = await users.find_one({"email": user_data.email})
     if existing_user:
-        logger.error("Email already registered")
+        # Audit log for duplicate registration attempt
+        logger.warning(
+            "Duplicate registration attempt",
+            extra={
+                "email": user_data.email,
+                "ip": request.client.host if request.client else "unknown",
+                "user_agent": request.headers.get("user-agent", "unknown")
+            }
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    
+
     # Create user document
     user_doc = {
         "email": user_data.email,
@@ -59,10 +68,33 @@ async def register(request: Request, user_data: UserRegister, users=Depends(get_
         "customer_id": None,
         "created_at": datetime.now(UTC)
     }
-    
+
     # Insert into database
-    result = await users.insert_one(user_doc)
-    logger.info("User registered: %s", user_data.email)
+    try:
+        result = await users.insert_one(user_doc)
+    except Exception as e:
+        logger.error(
+            "Database error during registration",
+            extra={
+                "error": str(e),
+                "email": user_data.email
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed"
+        )
+
+    # Audit log for successful registration
+    logger.info(
+        "User registered successfully",
+        extra={
+            "email": user_data.email,
+            "user_id": str(result.inserted_id),
+            "ip": request.client.host if request.client else "unknown",
+            "user_agent": request.headers.get("user-agent", "unknown")
+        }
+    )
 
     return UserResponse(
         id=str(result.inserted_id),
@@ -79,29 +111,42 @@ async def register(request: Request, user_data: UserRegister, users=Depends(get_
 async def login(request: Request, user_data: UserLogin, users=Depends(get_users_collection)):
     """
     Login and receive JWT token.
-    
+
     - Verifies email exists
     - Verifies password
     - Returns JWT token
+
+    Security: Uses constant-time comparison to prevent timing attacks
     """
     # Find user
     user = await users.find_one({"email": user_data.email})
-    if not user:
-        logger.warning("Failed login attempt - user not found: %s", user_data.email)
+
+    # SECURITY: Always verify password even if user doesn't exist (constant-time operation)
+    # This prevents timing attacks that could reveal if an email is registered
+    dummy_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYFj3YCqqjm"  # Dummy bcrypt hash
+    hashed_password = user["hashed_password"] if user else dummy_hash
+
+    # Always run password verification (constant time regardless of user existence)
+    password_valid = verify_password(user_data.password, hashed_password)
+
+    # Check both conditions together to prevent timing leaks
+    if not user or not password_valid:
+        # Audit log for security monitoring
+        logger.warning(
+            "Failed login attempt",
+            extra={
+                "email": user_data.email,
+                "ip": request.client.host if request.client else "unknown",
+                "user_agent": request.headers.get("user-agent", "unknown"),
+                "reason": "invalid_credentials"
+            }
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
 
-    # Verify password
-    if not verify_password(user_data.password, user["hashed_password"]):
-        logger.warning("Failed login attempt - invalid password: %s", user_data.email)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
-        )
-    
-    # Create token
+    # Create tokens
     access_token, expires_in = create_access_token(
         user_id=str(user["_id"]),
         email=user["email"],
@@ -110,7 +155,16 @@ async def login(request: Request, user_data: UserLogin, users=Depends(get_users_
     )
     refresh_token = create_refresh_token(user_id=str(user["_id"]))
 
-    logger.info("User logged in: %s", user_data.email)
+    # Audit log for successful login
+    logger.info(
+        "Successful login",
+        extra={
+            "email": user_data.email,
+            "user_id": str(user["_id"]),
+            "ip": request.client.host if request.client else "unknown",
+            "user_agent": request.headers.get("user-agent", "unknown")
+        }
+    )
 
     return TokenPairResponse(
         access_token=access_token,
@@ -127,19 +181,58 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
     # Verify refresh token
     user_id = verify_refresh_token(token_data.refresh_token)
     if not user_id:
+        logger.warning(
+            "Invalid refresh token attempt",
+            extra={
+                "ip": request.client.host if request.client else "unknown"
+            }
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
-    
-    # Get user from database
-    user = await users.find_one({"_id": ObjectId(user_id)})
+
+    # Get user from database with exception handling
+    try:
+        user = await users.find_one({"_id": ObjectId(user_id)})
+    except InvalidId:
+        logger.warning(
+            "Invalid ObjectId in refresh token",
+            extra={
+                "user_id": user_id,
+                "ip": request.client.host if request.client else "unknown"
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )
+    except Exception as e:
+        logger.error(
+            "Database error in /refresh endpoint",
+            extra={
+                "error": str(e),
+                "user_id": user_id
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
     if not user:
+        logger.warning(
+            "Refresh token references non-existent user",
+            extra={
+                "user_id": user_id,
+                "ip": request.client.host if request.client else "unknown"
+            }
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
         )
-    
+
     # Create new tokens
     access_token, expires_in = create_access_token(
         user_id=user_id,
@@ -148,7 +241,17 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
         customer_id=user.get("customer_id")
     )
     refresh_token = create_refresh_token(user_id=user_id)
-    
+
+    # Audit log for token refresh
+    logger.info(
+        "Token refreshed",
+        extra={
+            "email": user["email"],
+            "user_id": user_id,
+            "ip": request.client.host if request.client else "unknown"
+        }
+    )
+
     return TokenPairResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -205,21 +308,59 @@ async def me(
             detail="Invalid token payload"
         )
 
+    # SECURITY: Specific exception handling to prevent IDOR attacks
     try:
         user = await users.find_one({"_id": ObjectId(user_id)})
-    except Exception:
+    except InvalidId:
+        # Invalid ObjectId format - potential attack
+        logger.warning(
+            "Invalid ObjectId in token",
+            extra={
+                "user_id": user_id,
+                "ip": request.client.host if request.client else "unknown"
+            }
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID in token"
+            detail="Invalid token"
+        )
+    except Exception as e:
+        # Unexpected database error
+        logger.error(
+            "Database error in /me endpoint",
+            extra={
+                "error": str(e),
+                "user_id": user_id
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
         )
 
     if not user:
+        # Valid ObjectId but user doesn't exist (deleted account?)
+        logger.warning(
+            "Token references non-existent user",
+            extra={
+                "user_id": user_id,
+                "ip": request.client.host if request.client else "unknown"
+            }
+        )
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
         )
 
-    logger.info("User info retrieved: %s", user["email"])
+    # Audit log for successful user info retrieval
+    logger.info(
+        "User info retrieved",
+        extra={
+            "email": user["email"],
+            "user_id": user_id,
+            "ip": request.client.host if request.client else "unknown"
+        }
+    )
 
     return UserResponse(
         id=str(user["_id"]),
