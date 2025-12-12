@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw ingestion-run ingestion-test ingestion-lint gateway-run gateway-test gateway-lint producer-run generate-token clean
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token clean
 
 help:
 	@echo "MeterStream Development Commands"
@@ -14,10 +14,18 @@ help:
 	@echo "  make dev-logs      Show NATS logs"
 	@echo "  make nats-status   Show NATS JetStream status (streams, messages)"
 	@echo ""
+	@echo "  make mongo-up      Start MongoDB for local development"
+	@echo "  make mongo-down    Stop MongoDB"
+	@echo "  make mongo-logs    Show MongoDB logs (50 lines)"
+	@echo ""
 	@echo "Ingestion Service:"
 	@echo "  make ingestion-run   Run the ingestion service locally"
 	@echo "  make ingestion-test  Run ingestion service tests"
 	@echo "  make ingestion-lint  Run linter on ingestion service"
+	@echo ""
+	@echo "Auth Service:"
+	@echo "  make auth-run        Run the auth service locally"
+	@echo "  make auth-test       Run auth service tests"
 	@echo ""
 	@echo "Gateway Service:"
 	@echo "  make gateway-run     Run the API gateway locally"
@@ -49,6 +57,16 @@ nats-status:
 nats-status-raw:
 	@curl -s http://localhost:8222/jsz 2>/dev/null | python3 -m json.tool || echo "NATS not running"
 
+mongo-up:
+	docker compose -f docker-compose.mongo.yaml up -d
+	@echo "MongoDB is running at localhost:27017"
+
+mongo-down:
+	docker compose -f docker-compose.mongo.yaml down
+
+mongo-logs:
+	docker compose -f docker-compose.mongo.yaml logs -f --tail 50
+
 # Ingestion Service
 ingestion-run:
 	cd services/ingestion && \
@@ -64,6 +82,17 @@ ingestion-lint:
 	cd services/ingestion && \
 	source .venv/bin/activate && \
 	pylint src/ tests/
+
+# Auth Service
+auth-run:
+	cd services/auth && \
+	source .venv/bin/activate && \
+	MONGODB_URL=mongodb://localhost:27017 uvicorn src.main:app --reload --port 8001
+
+auth-test:
+	cd services/auth && \
+	source .venv/bin/activate && \
+	pytest tests/ -v
 
 # Gateway Service
 gateway-run:

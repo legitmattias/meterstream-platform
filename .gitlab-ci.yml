@@ -1,8 +1,39 @@
+# ==============================================================================
+# GitLab CI/CD Pipeline for MeterStream
+# ==============================================================================
+# This pipeline builds Docker images and deploys services to Kubernetes
+#
+# Stages:
+#   1. test-connection - Verify kubectl can connect to K8s cluster
+#   2. build          - Build Docker images with Kaniko
+#   3. deploy-staging - Deploy to staging environment
+#   4. deploy-prod    - TBC
+#
+# Triggers:
+#   - Automatic: When code changes in relevant directories (development branch bortkommenterat för nu!!)
+#   - Manual: Can be triggered manually for any job
+# ==============================================================================
+
 stages:
   - test-connection
   - build
   - deploy-staging
 
+# ------------------------------------------------------------------------------
+# Cache Configuration
+# ------------------------------------------------------------------------------
+# Caches kubectl binaries between pipeline runs to speed up deployment jobs
+.kubectl-cache:
+  cache:
+    key: kubectl-binary
+    paths:
+      - .kubectl-cache/
+
+# ------------------------------------------------------------------------------
+# Test Connection to Staging Cluster
+# ------------------------------------------------------------------------------
+# Verifies that GitLab can connect to the Kubernetes cluster
+# Run this manually if you want to test the connection
 test-staging-connection:
   stage: test-connection
   image:
@@ -14,8 +45,11 @@ test-staging-connection:
     - kubectl config current-context
     - kubectl get nodes
   rules:
-    - when: manual
+    - when: manual  # Only runs when manually triggered
 
+# ------------------------------------------------------------------------------
+# Test Connection to Production Cluster (Disabled)
+# ------------------------------------------------------------------------------
 # test-production-connection:
 #   stage: test-connection
 #   image:
@@ -29,19 +63,40 @@ test-staging-connection:
 #   rules:
 #     - when: always
 
+# ------------------------------------------------------------------------------
+# Global Variables
+# ------------------------------------------------------------------------------
 variables:
-  IMAGE_BASE: ${CI_REGISTRY_IMAGE}
-  TAG: ${CI_COMMIT_SHORT_SHA}
+  IMAGE_BASE: ${CI_REGISTRY_IMAGE}  # GitLab registry URL
+  TAG: ${CI_COMMIT_SHORT_SHA}       # Short git commit SHA (e.g., "a1b2c3d")
 
-# ------------------------------
-# Build Template
-# ------------------------------
+# ==============================================================================
+# BUILD STAGE - Docker Image Building
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Build Template (Reusable for all services)
+# ------------------------------------------------------------------------------
+# Uses Kaniko to build Docker images
+#
+# Features:
+#   - Builds from services/${SERVICE_NAME}/Dockerfile
+#   - Tags with both commit SHA and "latest"
+#   - Layer caching enabled (7 days TTL)
+#   - Only builds when relevant files change
+#
+# How it works:
+#   1. Authenticates to GitLab Container Registry
+#   2. Builds Docker image using Kaniko (no Docker daemon needed)
+#   3. Pushes to registry with two tags: ${TAG} and latest
+#   4. Uses layer cache to speed up subsequent builds
 .build:
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
   script:
+    # Create Docker auth config for pushing to GitLab registry
     - mkdir -p /kaniko/.docker
     - |
       cat > /kaniko/.docker/config.json <<EOF
@@ -54,79 +109,313 @@ variables:
         }
       }
       EOF
-    - /kaniko/executor
-      --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}"
-      --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile"
-      --destination "${IMAGE_BASE}/${SERVICE_NAME}:${TAG}"
-      --destination "${IMAGE_BASE}/${SERVICE_NAME}:latest"
+    # Build and push Docker image
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}" \
+        --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile" \
+        --destination "${IMAGE_BASE}/${SERVICE_NAME}:${TAG}" \
+        --destination "${IMAGE_BASE}/${SERVICE_NAME}:latest" \
+        --cache=true \
+        --cache-ttl=168h
   rules:
-    - if: '$CI_COMMIT_BRANCH == "development"'
-    - when: manual
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - services/${SERVICE_NAME}/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
 
+# ------------------------------------------------------------------------------
+# Build: Ingestion Service
+# ------------------------------------------------------------------------------
 build-ingestion:
   extends: .build
   variables:
-    SERVICE_NAME: ingestion
+    SERVICE_NAME: ingestion  # Builds from services/ingestion/
 
-# ------------------------------
-# Deploy NATS to Staging
-# ------------------------------
-deploy-nats-staging:
+# ------------------------------------------------------------------------------
+# Build: Auth Service
+# ------------------------------------------------------------------------------
+build-auth:
+  extends: .build
+  variables:
+    SERVICE_NAME: auth  # Builds from services/auth/
+
+# ------------------------------------------------------------------------------
+# Build: Processor Service
+# ------------------------------------------------------------------------------
+build-processor:
+  extends: .build
+  variables:
+    SERVICE_NAME: processor  # Builds from services/processor/
+
+# ------------------------------------------------------------------------------
+# Build: Gateway Service
+# ------------------------------------------------------------------------------
+build-gateway:
+  extends: .build
+  variables:
+    SERVICE_NAME: gateway  # Builds from services/gateway/
+
+# ==============================================================================
+# DEPLOY STAGE - Kubernetes Deployment
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Deploy Template (Reusable for all deployments)
+# ------------------------------------------------------------------------------
+# Sets up kubectl connection to Kubernetes cluster
+#
+# Before every deployment job:
+#   1. Decodes base64-encoded kubeconfig from GitLab CI/CD variable
+#   2. Connects to cluster and verifies connection
+#   3. Creates namespace if it doesn't exist
+.deploy-base:
   stage: deploy-staging
   image:
     name: bitnami/kubectl:latest
     entrypoint: [""]
-  script:
+  before_script:
+    # Setup kubectl authentication
     - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
     - export KUBECONFIG=$PWD/kubeconfig
-    
-    # Sanity check
+
+    # Verify connection
     - kubectl config current-context
     - kubectl get nodes
-    - kubectl create namespace meterstream || true
 
-    # Apply K8s manifests
+    # Ensure namespace exists
+    - kubectl create namespace meterstream || true
+  environment:
+    name: staging
+
+# ------------------------------------------------------------------------------
+# Deploy: MongoDB Database
+# ------------------------------------------------------------------------------
+# Deploys MongoDB StatefulSet with persistent storage
+#
+# What it deploys:
+#   - Secret: MongoDB credentials
+#   - Service: Headless service for StatefulSet
+#   - StatefulSet: MongoDB with persistent volume
+#
+# Note: Uses StatefulSet (not Deployment) because MongoDB needs stable storage
+deploy-mongodb-staging:
+  extends: .deploy-base
+  script:
+    # Apply all MongoDB manifests (secret, service, statefulset)
+    - kubectl apply -f k8s/mongoDB/ -n meterstream
+
+    # Wait for StatefulSet to be ready (max 2 minutes)
+    - kubectl -n meterstream rollout status statefulset/mongodb --timeout=120s
+  rules:
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/mongoDB/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
+
+# ------------------------------------------------------------------------------
+# Deploy: NATS Message Queue
+# ------------------------------------------------------------------------------
+# Deploys NATS StatefulSet for message queuing
+#
+# What it deploys:
+#   - ConfigMap: NATS configuration
+#   - Service: NATS service for client connections
+#   - StatefulSet: NATS with persistent storage
+deploy-nats-staging:
+  extends: .deploy-base
+  script:
+    # Apply all NATS manifests
     - kubectl apply -f k8s/nats/ -n meterstream
 
-    # Wait for rollout
+    # Wait for StatefulSet to be ready (max 2 minutes)
     - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
-  environment:
-    name: staging
   rules:
-    - if: '$CI_COMMIT_BRANCH == "development"'
-      when: manual
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/nats/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
 
-# ------------------------------
-# Deploy Ingestion to Staging (Manual)
-# ------------------------------
+# ------------------------------------------------------------------------------
+# Deploy: Ingestion Service
+# ------------------------------------------------------------------------------
+# Deploys the ingestion service that receives meter data
+#
+# What it deploys:
+#   - Deployment: Ingestion service pods
+#   - Service: LoadBalancer for external access
+#
+# Depends on:
+#   - build-ingestion (optional) - Uses new image if built, otherwise uses latest
+#   - NATS must be running
 deploy-ingestion-staging:
-  stage: deploy-staging
-  image:
-    name: bitnami/kubectl:latest
-    entrypoint: [""]
+  extends: .deploy-base
   needs:
-    - build-ingestion
+    - job: build-ingestion
+      optional: true  # Can deploy even if build was skipped
   script:
-    - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
-    - export KUBECONFIG=$PWD/kubeconfig
-
-    # Sanity check
-    - kubectl config current-context
-    - kubectl get nodes
-    - kubectl create namespace meterstream || true
-    # Apply K8s manifests
+    # Apply manifests (service, deployment)
     - kubectl apply -f k8s/ingestion/ -n meterstream
 
-    # Update image
+    # Update deployment to use newly built image
     - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
 
-    # Wait for rollout
+    # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
-  environment:
-    name: staging
   rules:
-    - if: '$CI_COMMIT_BRANCH == "development"'
-      when: manual
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/ingestion/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
+
+# ------------------------------------------------------------------------------
+# Deploy: Auth Service
+# ------------------------------------------------------------------------------
+# Deploys the authentication service with JWT tokens
+#
+# What it deploys:
+#   - Secret: JWT secret key
+#   - ConfigMap: MongoDB connection URL
+#   - Service: Internal ClusterIP service on port 8001
+#   - Deployment: Auth service pods (2 replicas)
+#
+# Depends on:
+#   - build-auth (optional) - Uses new image if built, otherwise uses latest
+#   - MongoDB must be running
+#
+# Post-deployment:
+#   - Verifies /health endpoint (liveness check)
+#   - Verifies /ready endpoint (MongoDB connection check)
+deploy-auth-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-auth
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Apply all manifests (secret, configmap, service, deployment)
+    - kubectl apply -f k8s/auth/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/auth --timeout=120s
+
+    # Health check verification
+    - |
+      echo "Waiting for auth service to be ready..."
+      sleep 10
+      kubectl -n meterstream get pods -l app=auth
+
+      echo "Testing health endpoints..."
+
+      # Test /health endpoint (liveness probe)
+      kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
+        curl -f http://auth.meterstream.svc.cluster.local:8001/health || exit 1
+
+      # Test /ready endpoint (readiness probe - checks MongoDB)
+      kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
+        curl -f http://auth.meterstream.svc.cluster.local:8001/ready || exit 1
+
+      echo "✅ Auth service is healthy and ready!"
+  rules:
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/auth/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
+
+# ------------------------------------------------------------------------------
+# Deploy: Processor Service
+# ------------------------------------------------------------------------------
+# Deploys the processor service that processes meter data from NATS
+#
+# What it deploys:
+#   - Deployment: Processor service pods
+#   - Service: Internal ClusterIP service
+#
+# Depends on:
+#   - build-processor (optional) - Uses new image if built, otherwise uses latest
+#   - NATS must be running
+deploy-processor-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-processor
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/processor/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/processor --timeout=120s
+  rules:
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/processor/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
+
+# ------------------------------------------------------------------------------
+# Deploy: Gateway Service
+# ------------------------------------------------------------------------------
+# Deploys the API gateway with JWT authentication
+#
+# What it deploys:
+#   - Secret: JWT secret key
+#   - Service: LoadBalancer service for external access
+#   - Deployment: Gateway service pods
+#
+# Depends on:
+#   - build-gateway (optional) - Uses new image if built, otherwise uses latest
+#   - Auth service must be running
+deploy-gateway-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-gateway
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Apply manifests (secret, service, deployment)
+    - kubectl apply -f k8s/gateway/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
+  rules:
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/gateway/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
+
+
+
+
+# ------------------------------
+# Deploy to prod
+# ------------------------------
 
 # stages:
 #   - build
@@ -259,19 +548,3 @@ deploy-ingestion-staging:
 #     - if: '$CI_COMMIT_BRANCH == "main"'
 #       when: manual
 # ```
-
-# ---
-
-# ### 1. Folder structure
-# ```
-# meterstream/
-# ├── .gitlab-ci.yml
-# └── services/
-#     ├── ingestion/
-#     │   └── Dockerfile
-#     ├── processor/
-#     │   └── Dockerfile
-#     ├── auth/
-#     │   └── Dockerfile
-#     └── gateway/
-#         └── Dockerfile
