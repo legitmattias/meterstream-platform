@@ -143,6 +143,22 @@ build-auth:
   variables:
     SERVICE_NAME: auth  # Builds from services/auth/
 
+# ------------------------------------------------------------------------------
+# Build: Processor Service
+# ------------------------------------------------------------------------------
+build-processor:
+  extends: .build
+  variables:
+    SERVICE_NAME: processor  # Builds from services/processor/
+
+# ------------------------------------------------------------------------------
+# Build: Gateway Service
+# ------------------------------------------------------------------------------
+build-gateway:
+  extends: .build
+  variables:
+    SERVICE_NAME: gateway  # Builds from services/gateway/
+
 # ==============================================================================
 # DEPLOY STAGE - Kubernetes Deployment
 # ==============================================================================
@@ -320,6 +336,77 @@ deploy-auth-staging:
     #   - if: '$CI_COMMIT_BRANCH == "development"'
     #     changes:
     #       - k8s/auth/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
+
+# ------------------------------------------------------------------------------
+# Deploy: Processor Service
+# ------------------------------------------------------------------------------
+# Deploys the processor service that processes meter data from NATS
+#
+# What it deploys:
+#   - Deployment: Processor service pods
+#   - Service: Internal ClusterIP service
+#
+# Depends on:
+#   - build-processor (optional) - Uses new image if built, otherwise uses latest
+#   - NATS must be running
+deploy-processor-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-processor
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/processor/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/processor --timeout=120s
+  rules:
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/processor/**/*
+    #       - .gitlab-ci.yml
+    - when: manual  # Always manual for now
+
+# ------------------------------------------------------------------------------
+# Deploy: Gateway Service
+# ------------------------------------------------------------------------------
+# Deploys the API gateway with JWT authentication
+#
+# What it deploys:
+#   - Secret: JWT secret key
+#   - Service: LoadBalancer service for external access
+#   - Deployment: Gateway service pods
+#
+# Depends on:
+#   - build-gateway (optional) - Uses new image if built, otherwise uses latest
+#   - Auth service must be running
+deploy-gateway-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-gateway
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Apply manifests (secret, service, deployment)
+    - kubectl apply -f k8s/gateway/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
+  rules:
+    # Manual trigger only during early development
+    # TODO: Enable auto-trigger when stable:
+    #   - if: '$CI_COMMIT_BRANCH == "development"'
+    #     changes:
+    #       - k8s/gateway/**/*
     #       - .gitlab-ci.yml
     - when: manual  # Always manual for now
 
