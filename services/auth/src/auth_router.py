@@ -260,11 +260,7 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
 
 @router.get("/me", response_model=UserResponse)
 @limiter.limit("30/minute")  # Max 30 requests per minute per IP
-async def me(
-    request: Request,
-    authorization: Optional[str] = Header(None),
-    users=Depends(get_users_collection)
-):
+async def me(request: Request, authorization: Optional[str] = Header(None), users=Depends(get_users_collection)):
     """
     Get current user information from JWT token.
 
