@@ -356,11 +356,11 @@ deploy-auth-staging:
 
       # Test /health endpoint (liveness probe)
       kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
-        curl -f http://auth.meterstream.svc.cluster.local:8001/health || exit 1
+        curl -f http://auth.meterstream.svc.cluster.local:8000/health || exit 1
 
       # Test /ready endpoint (readiness probe - checks MongoDB)
       kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
-        curl -f http://auth.meterstream.svc.cluster.local:8001/ready || exit 1
+        curl -f http://auth.meterstream.svc.cluster.local:8000/ready || exit 1
 
       echo "✅ Auth service is healthy and ready!"
   rules:
