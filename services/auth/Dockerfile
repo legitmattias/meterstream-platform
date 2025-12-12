@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 
 # Expose port
-EXPOSE 8001
+EXPOSE 8000
 
 # Set Python path and run
 ENV PYTHONPATH=/app
