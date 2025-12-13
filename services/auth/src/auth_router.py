@@ -288,7 +288,7 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
 
 
 # ============================================================================
-# HELPER FUNCTIONS (DRY - Don't Repeat Yourself)
+# HELPER FUNCTIONS
 # ============================================================================
 
 def get_client_info(request: Request) -> dict:
