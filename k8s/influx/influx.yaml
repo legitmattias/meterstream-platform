@@ -1,40 +1,3 @@
-apiVersion: v1
-metadata:
-  name: influxdb
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: influxdb-credentials
-type: Opaque
-stringData:
-  admin-username: admin
-  admin-password: admin123
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: influxdb-config
-data:
-  init-mode: setup
-  org: team-org
-  bucket: raw-data
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: influxdb-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -58,29 +21,39 @@ spec:
         env:
         - name: DOCKER_INFLUXDB_INIT_MODE
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: init-mode
+            secretKeyRef:
+              name: influxdb-init
+              key: DOCKER_INFLUXDB_INIT_MODE
         - name: DOCKER_INFLUXDB_INIT_USERNAME
           valueFrom:
             secretKeyRef:
-              name: influxdb-credentials
-              key: admin-username
+              name: influxdb-init
+              key: DOCKER_INFLUXDB_INIT_USERNAME
         - name: DOCKER_INFLUXDB_INIT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: influxdb-credentials
-              key: admin-password
+              name: influxdb-init
+              key: DOCKER_INFLUXDB_INIT_PASSWORD
         - name: DOCKER_INFLUXDB_INIT_ORG
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: org
+            secretKeyRef:
+              name: influxdb-init
+              key: DOCKER_INFLUXDB_INIT_ORG
         - name: DOCKER_INFLUXDB_INIT_BUCKET
           valueFrom:
-            configMapKeyRef:
-              name: influxdb-config
-              key: bucket
+            secretKeyRef:
+              name: influxdb-init
+              key: DOCKER_INFLUXDB_INIT_BUCKET
+        - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-init
+              key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+        - name: DOCKER_INFLUXDB_INIT_RETENTION
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-init
+              key: DOCKER_INFLUXDB_INIT_RETENTION
         volumeMounts:
         - name: influxdb-storage
           mountPath: /var/lib/influxdb2

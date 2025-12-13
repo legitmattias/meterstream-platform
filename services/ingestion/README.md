@@ -65,5 +65,5 @@ docker run -e NATS_URL=nats://host:4222 -p 8000:8000 ingestion
 ## Tests
 
 ```bash
-pytest tests/
+pytest tests/ -v
 ```

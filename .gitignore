@@ -64,6 +64,9 @@ Temporary Items
 logs
 *.log
 npm-debug.log*
+
+# Lock files (scripts are dev utilities, not production)
+scripts/package-lock.json
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*

@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  labels:
+    app: auth
+spec:
+  replicas: 1 # one replica for now???
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: auth
+          image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/auth:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            # MongoDB connection credentials (from secrets)
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGODB_USERNAME
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGODB_PASSWORD
+
+            # MongoDB connection details (from configmap)
+            - name: MONGODB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: mongodb_host
+            - name: MONGODB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: mongodb_port
+            - name: DATABASE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: mongodb_database
+
+            # Construct MongoDB URL from credentials
+            - name: MONGODB_URL
+              value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@$(MONGODB_HOST):$(MONGODB_PORT)"
+
+            # JWT Configuration (secret and config)
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
+            - name: JWT_ALGORITHM
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: jwt_algorithm
+            - name: JWT_EXPIRE_MINUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: jwt_expire_minutes
+            - name: JWT_REFRESH_EXPIRE_DAYS
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: jwt_refresh_expire_days
+
+            # Service Configuration
+            - name: SERVICE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: service_name
+            - name: DEBUG
+              value: "false"
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: log_level
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5

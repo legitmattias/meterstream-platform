@@ -1,0 +1,22 @@
+# Development MongoDB for MeterStream
+# Usage: docker compose -f docker-compose.mongo.yaml up -d
+#
+# This starts MongoDB locally for development.
+# Services can run locally (outside Docker) and connect to MongoDB.
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: meterstream-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  mongodb-data:
