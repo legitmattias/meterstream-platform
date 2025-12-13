@@ -384,28 +384,28 @@ deploy-auth-staging:
 # Depends on:
 #   - build-processor (optional) - Uses new image if built, otherwise uses latest
 #   - NATS must be running
-deploy-processor-staging:
-  extends: .deploy-base
-  needs:
-    - job: build-processor
-      optional: true  # Can deploy even if build was skipped
-  script:
-    # Apply manifests (service, deployment)
-    - kubectl apply -f k8s/processor/ -n meterstream
+# deploy-processor-staging:
+#   extends: .deploy-base
+#   needs:
+#     - job: build-processor
+#       optional: true  # Can deploy even if build was skipped
+#   script:
+#     # Apply manifests (service, deployment)
+#     - kubectl apply -f k8s/processor/ -n meterstream
 
-    # Update deployment to use newly built image
-    - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
+#     # Update deployment to use newly built image
+#     - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
 
-    # Wait for deployment to finish (max 2 minutes)
-    - kubectl -n meterstream rollout status deploy/processor --timeout=120s
-  rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/processor/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+#     # Wait for deployment to finish (max 2 minutes)
+#     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
+#   rules:
+#     # Manual trigger only during early development
+#     # TODO: Enable auto-trigger when stable:
+#     #   - if: '$CI_COMMIT_BRANCH == "development"'
+#     #     changes:
+#     #       - k8s/processor/**/*
+#     #       - .gitlab-ci.yml
+#     - when: manual  # Always manual for now
 
 # ------------------------------------------------------------------------------
 # Deploy: Gateway Service

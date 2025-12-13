@@ -12,15 +12,15 @@ class Settings(BaseSettings):
     mongodb_url: str = "mongodb://localhost:27017"
     database_name: str = "meterstream_auth"
 
-    # JWT
-    jwt_secret: str = "super-secret-key-change-in-production"
+    # JWT - CRITICAL: jwt_secret MUST be set via environment variable
+    jwt_secret: str  # No default for security - must be set explicitly. use .env for locall testing
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
     jwt_refresh_expire_days: int = 7
 
     # Service
     service_name: str = "Meterstream auth-service"
-    debug: bool = True
+    debug: bool = False  # SECURITY: Default to False for production safety
     log_level: str = "INFO"
 
     # Bootstrap admin (only used if no admin exists)
