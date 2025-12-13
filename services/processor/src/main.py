@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 import nats
 from fastapi import FastAPI, HTTPException
+from pydantic import ValidationError
 
 from src.config import settings
 from src.models import MeterReading, HealthResponse
@@ -20,6 +21,15 @@ _nc = None
 _js = None
 _consumer_task = None
 
+async def _connect_with_retry():
+    """Connect to NATS (retry until it works)."""
+    while True:
+        try:
+            nc = await nats.connect(settings.nats_url)
+            return nc
+        except Exception as e:
+            logger.warning("Failed to connect to NATS: %s. Retrying...", e)
+            await asyncio.sleep(1)
 
 async def _subscribe_with_retry():
     """Create pull subscription (retry until it works)."""
@@ -33,6 +43,16 @@ async def _subscribe_with_retry():
         except Exception as e:
             logger.warning("Failed to subscribe: %s. Retrying...", e)
             await asyncio.sleep(1)
+
+async def _process_reading(reading: MeterReading) -> None: 
+    """Process one reading.""" 
+    if reading.power_consumption < 0:
+        raise ValueError(f"Negative consumption: {reading.power_consumption}") 
+
+    # TODO 
+    # 1) Aggregering 
+    # 2) Skriv till InfluxDB
+    return
 
 
 async def _consume_messages() -> None:
@@ -55,28 +75,36 @@ async def _consume_messages() -> None:
             try:
                 data = json.loads(msg.data.decode("utf-8"))
                 reading = MeterReading(**data)
-                logger.info("Parsed reading: %s %s %s %.3f",
-                            reading.timestamp, reading.customer, reading.area, reading.power_consumption)
 
-                # TODO:
-                # 1) Filtrering (nollor/brus)
-                # 2) Aggregering (15-min -> hourly)
-                # 3) Skriv till InfluxDB
+                logger.info(
+                    "Parsed reading: %s %s %s %.3f",
+                    reading.timestamp,
+                    reading.customer,
+                    reading.area,
+                    reading.power_consumption
+                )
+
+                await _process_reading(reading) #Processa
 
                 await msg.ack()
                 logger.info("Acked message")
+            except (json.JSONDecodeError, ValidationError) as e:
+                logger.warning("Bad message, terminating: %s", e)
+                await msg.term()
+            
             except Exception as e:
                 logger.warning("Failed to process message (not acked): %s", e)
-                # Lämna o-ackad => JetStream kan redelivera
-
+                # Lämna ej acknowledged => JetStream kan redelivera
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global _nc, _js, _consumer_task
 
     logger.info("Starting data processor")
-    _nc = await nats.connect(settings.nats_url)
+
+    _nc = await _connect_with_retry()
     _js = _nc.jetstream()
+    
     _consumer_task = asyncio.create_task(_consume_messages())
 
     try:
