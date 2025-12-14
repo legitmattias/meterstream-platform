@@ -10,5 +10,11 @@ class Settings(BaseSettings):
     nats_stream: str = "METER_DATA"
     nats_subject: str = "meter.readings"
 
+    influx_url: str = "http://influxdb:8086"
+    influx_org: str = "meterstream"
+    influx_bucket: str = "meterstream"
+    influx_token: str = ""
+    influx_measurement: str = "meter_readings"
+
 
 settings = Settings()

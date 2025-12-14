@@ -4,12 +4,13 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
+import aiohttp
 import nats
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 
 from src.config import settings
-from src.models import MeterReading, HealthResponse
+from src.models import HealthResponse, MeterReading
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,51 +18,87 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_nc = None
-_js = None
+_nats_connection = None
+_jetstream = None
 _consumer_task = None
+_http_session: aiohttp.ClientSession | None = None
+
 
 async def _connect_with_retry():
     """Connect to NATS (retry until it works)."""
     while True:
         try:
-            nc = await nats.connect(settings.nats_url)
-            return nc
+            return await nats.connect(settings.nats_url)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.warning("Failed to connect to NATS: %s. Retrying...", e)
             await asyncio.sleep(1)
 
-async def _subscribe_with_retry():
+
+async def _create_subscription_with_retry():
     """Create pull subscription (retry until it works)."""
     while True:
         try:
-            return await _js.pull_subscribe(
+            return await _jetstream.pull_subscribe(
                 subject=settings.nats_subject,
                 durable="dataprocessor",
                 stream=settings.nats_stream,
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.warning("Failed to subscribe: %s. Retrying...", e)
             await asyncio.sleep(1)
 
-async def _process_reading(reading: MeterReading) -> None: 
-    """Process one reading.""" 
-    if reading.power_consumption < 0:
-        raise ValueError(f"Negative consumption: {reading.power_consumption}") 
 
-    # TODO 
-    # 1) Aggregering 
-    # 2) Skriv till InfluxDB
-    return
+def _to_influx_line_protocol(reading: MeterReading) -> str:
+    """Convert MeterReading -> Influx line protocol."""
+    if reading.power_consumption < 0:
+        raise ValueError(f"Negative consumption: {reading.power_consumption}")
+
+    timestamp_nanoseconds = int(reading.timestamp.timestamp() * 1_000_000_000)
+
+    return (
+        f"{settings.influx_measurement},customer={reading.customer},area={reading.area} "
+        f"power_consumption={float(reading.power_consumption)} {timestamp_nanoseconds}"
+    )
+
+
+async def _write_line_to_influxdb(line: str) -> None:
+    """Write one line to InfluxDB."""
+    if _http_session is None:
+        raise RuntimeError("HTTP client not initialized")
+    if not settings.influx_token:
+        raise RuntimeError("Missing INFLUX_TOKEN (settings.influx_token)")
+
+    url = settings.influx_url.rstrip("/") + "/api/v2/write"
+    params = {
+        "org": settings.influx_org,
+        "bucket": settings.influx_bucket,
+        "precision": "ns",
+    }
+    headers = {"Authorization": f"Token {settings.influx_token}"}
+
+    async with _http_session.post(url, params=params, data=line + "\n", headers=headers) as resp:
+        if resp.status >= 300:
+            text = await resp.text()
+            raise RuntimeError(f"Influx write failed: {resp.status} {text}")
+
+
+async def _process_reading(reading: MeterReading) -> None:
+    """Process one reading and write to InfluxDB."""
+    line = _to_influx_line_protocol(reading)
+    await _write_line_to_influxdb(line)
 
 
 async def _consume_messages() -> None:
-    """Minimal NATS consumer loop."""
-    sub = await _subscribe_with_retry()
+    """Main method - NATS consumer loop."""
+    subscription = await _create_subscription_with_retry()
 
     while True:
         try:
-            msgs = await sub.fetch(batch=10, timeout=1)
+            messages = await subscription.fetch(batch=50, timeout=1)
         except nats.errors.TimeoutError:
             continue
         except asyncio.CancelledError:
@@ -71,46 +108,49 @@ async def _consume_messages() -> None:
             await asyncio.sleep(1)
             continue
 
-        for msg in msgs:
+        for message in messages:
             try:
-                data = json.loads(msg.data.decode("utf-8"))
-                reading = MeterReading(**data)
+                payload = json.loads(message.data.decode("utf-8"))
+                reading = MeterReading(**payload)
 
                 logger.info(
-                    "Parsed reading: %s %s %s %.3f",
+                    "Parsed reading: %s %s %s %.6f",
                     reading.timestamp,
                     reading.customer,
                     reading.area,
-                    reading.power_consumption
+                    reading.power_consumption,
                 )
 
-                await _process_reading(reading) #Processa
+                await _process_reading(reading)
 
-                await msg.ack()
+                await message.ack()
                 logger.info("Acked message")
+
             except (json.JSONDecodeError, ValidationError) as e:
                 logger.warning("Bad message, terminating: %s", e)
-                await msg.term()
-            
+                await message.term()
+
             except Exception as e:
-                logger.warning("Failed to process message (not acked): %s", e)
-                # Lämna ej acknowledged => JetStream kan redelivera
+                logger.warning("Failed to process/write (not acked): %s", e)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    global _nc, _js, _consumer_task
+    global _nats_connection, _jetstream, _consumer_task, _http_session
 
     logger.info("Starting data processor")
 
-    _nc = await _connect_with_retry()
-    _js = _nc.jetstream()
-    
+    _http_session = aiohttp.ClientSession()
+    _nats_connection = await _connect_with_retry()
+    _jetstream = _nats_connection.jetstream()
+
     _consumer_task = asyncio.create_task(_consume_messages())
 
     try:
         yield
     finally:
         logger.info("Shutting down data processor")
+
         if _consumer_task:
             _consumer_task.cancel()
             try:
@@ -118,13 +158,16 @@ async def lifespan(_app: FastAPI):
             except asyncio.CancelledError:
                 pass
 
-        if _nc:
-            await _nc.drain()
+        if _nats_connection:
+            await _nats_connection.drain()
+
+        if _http_session:
+            await _http_session.close()
 
 
 app = FastAPI(
     title="Data Processor",
-    description="Consumes meter readings from NATS",
+    description="Consumes meter readings from NATS and writes to InfluxDB",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -137,6 +180,6 @@ async def health():
 
 @app.get("/ready", response_model=HealthResponse)
 async def ready():
-    if _nc is None or not _nc.is_connected:
+    if _nats_connection is None or not _nats_connection.is_connected:
         raise HTTPException(status_code=503, detail="NATS not connected")
     return HealthResponse()
