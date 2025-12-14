@@ -1,4 +1,5 @@
 """Data Processing Service - retrieves and processes meter readings from NATS JetStream."""
+import time 
 import asyncio
 import json
 import logging
@@ -57,7 +58,8 @@ def _to_influx_line_protocol(reading: MeterReading) -> str:
     if reading.power_consumption < 0:
         raise ValueError(f"Negative consumption: {reading.power_consumption}")
 
-    timestamp_nanoseconds = int(reading.timestamp.timestamp() * 1_000_000_000)
+    #timestamp_nanoseconds = int(reading.timestamp.timestamp() * 1_000_000_000)
+    timestamp_nanoseconds = time.time_ns() # Ändra tillbaka senare
 
     return (
         f"{settings.influx_measurement},customer={reading.customer},area={reading.area} "
