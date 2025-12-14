@@ -22,15 +22,6 @@ def test_meter_reading_valid_with_aliases():
     assert reading.area == "Kvarnholmen"
     assert reading.power_consumption == 0.0112
 
-
-def test_meter_reading_missing_field_raises():
-    with pytest.raises(Exception):
-        MeterReading(
-            DateTime=datetime(2020, 1, 1, 0, 0, 0),
-            CUSTOMER="1060598736",
-            # Missing AREA and Power_Consumption
-        )
-
 def test_meterreading_missing_required_field_raises_validationerror():
     # Saknar AREA och Power_Consumption -> ska faila
     with pytest.raises(ValidationError):

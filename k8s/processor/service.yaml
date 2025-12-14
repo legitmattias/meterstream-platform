@@ -3,13 +3,11 @@ kind: Service
 metadata:
   name: processor
   namespace: meterstream
-  labels:
-    app: processor
 spec:
   selector:
     app: processor
   ports:
     - name: http
       port: 8001
-      targetPort: http
+      targetPort: 8001
   type: ClusterIP

@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processor
+  namespace: meterstream
+  labels:
+    app: processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: processor
+  template:
+    metadata:
+      labels:
+        app: processor
+    spec:
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: processor
+          image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/processor:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8001
+              name: http
+          env:
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: NATS_STREAM
+              value: "METER_DATA"
+            - name: NATS_SUBJECT
+              value: "meter.readings"
+
+            - name: INFLUX_URL
+              value: "http://influxdb:8086"
+            - name: INFLUX_ORG
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-init
+                  key: DOCKER_INFLUXDB_INIT_ORG
+            - name: INFLUX_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-init
+                  key: DOCKER_INFLUXDB_INIT_BUCKET
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-init
+                  key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8001
+            initialDelaySeconds: 3
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 30

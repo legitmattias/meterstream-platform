@@ -18,7 +18,6 @@ kubectl apply -f service.yaml
 kubectl apply -f deployment.yaml
 ```
 
-> **Note:** Update the image path in `deployment.yaml` after CI/CD is configured.
 
 ### Prerequisites
 
