@@ -276,14 +276,12 @@ deploy-nats-staging:
 #
 # Depends on:
 #   - build-ingestion (optional) - Uses new image if built, otherwise uses latest
-#   - NATS must be running (required)
+#   - NATS must be running (handled by Kubernetes health checks, not pipeline dependencies)
 deploy-ingestion-staging:
   extends: .deploy-base
   needs:
     - job: build-ingestion
       optional: true  # Can deploy even if build was skipped
-    - job: deploy-nats-staging
-      optional: false  # NATS must be deployed first
   script:
     # Apply manifests (service, deployment)
     - kubectl apply -f k8s/ingestion/ -n meterstream
@@ -315,7 +313,7 @@ deploy-ingestion-staging:
 #
 # Depends on:
 #   - build-auth (optional) - Uses new image if built, otherwise uses latest
-#   - MongoDB must be running (required)
+#   - MongoDB must be running (handled by Kubernetes readiness probes, not pipeline dependencies)
 #
 # Post-deployment:
 #   - Verifies /health endpoint (liveness check)
@@ -325,8 +323,6 @@ deploy-auth-staging:
   needs:
     - job: build-auth
       optional: true  # Can deploy even if build was skipped
-    - job: deploy-mongodb-staging
-      optional: false  # MongoDB must be deployed first
   script:
     # Create JWT secret from CI/CD variables (shared with Gateway)
     - |
@@ -419,14 +415,12 @@ deploy-auth-staging:
 #
 # Depends on:
 #   - build-gateway (optional) - Uses new image if built, otherwise uses latest
-#   - Auth service must be running (required)
+#   - Auth service must be running (handled by Kubernetes service discovery, not pipeline dependencies)
 deploy-gateway-staging:
   extends: .deploy-base
   needs:
     - job: build-gateway
       optional: true  # Can deploy even if build was skipped
-    - job: deploy-auth-staging
-      optional: false  # Auth service must be deployed first
   script:
     # Apply manifests (secret, service, deployment)
     - kubectl apply -f k8s/gateway/ -n meterstream
