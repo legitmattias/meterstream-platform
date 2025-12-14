@@ -13,7 +13,6 @@ def test_health_endpoint_ok():
 def test_ready_endpoint_returns_503_when_not_connected():
     client = TestClient(main.app)
 
-    # ensure we look "not connected"
     main._nats_connection = None
 
     res = client.get("/ready")
