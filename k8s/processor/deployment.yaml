@@ -50,6 +50,14 @@ spec:
                   name: influxdb-init
                   key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
 
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+
           readinessProbe:
             httpGet:
               path: /ready
