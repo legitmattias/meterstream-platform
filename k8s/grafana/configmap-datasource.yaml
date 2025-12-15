@@ -1,0 +1,20 @@
+#Provisionerar InfluxDB datasource i Grafana automatiskt vid start (Flux + org/bucket).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+data:
+  datasources.yaml: | # | = multirad sträng
+    apiVersion: 1
+    datasources:
+      - name: InfluxDB
+        type: influxdb
+        access: proxy
+        url: http://influxdb:8086
+        isDefault: true
+        jsonData:
+          version: Flux
+          organization: meterstream
+          defaultBucket: meterstream
+        secureJsonData:
+          token: ${INFLUX_TOKEN}
