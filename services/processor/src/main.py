@@ -54,8 +54,6 @@ async def _create_subscription_with_retry():
 
 def _to_influx_line_protocol(reading: MeterReading) -> str:
     """Convert MeterReading -> Influx line protocol."""
-    if reading.power_consumption < 0:
-        raise ValueError(f"Negative consumption: {reading.power_consumption}")
 
     timestamp_nanoseconds = int(reading.timestamp.timestamp() * 1_000_000_000)
 
