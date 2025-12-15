@@ -374,6 +374,15 @@ deploy-frontend-staging:
   rules:
     - when: manual
 
+# Ingress - Traefik routing (frontend + API gateway)
+deploy-ingress-staging:
+  extends: .deploy-base
+  script:
+    - kubectl apply -f k8s/ingress/ingress.yaml -n meterstream
+    - kubectl get ingress -n meterstream
+  rules:
+    - when: manual
+
 # InfluxDB - Time-series database
 deploy-influx-staging:
   extends: .deploy-base
@@ -652,6 +661,16 @@ deploy-frontend-prod:
       kubectl -n meterstream set image deploy/frontend frontend="${IMAGE_BASE}/frontend:${IMAGE_TAG}"
 
     - kubectl -n meterstream rollout status deploy/frontend --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Ingress - Traefik routing (frontend + API gateway)
+deploy-ingress-prod:
+  extends: .deploy-base-prod
+  script:
+    - kubectl apply -f k8s/ingress/ingress.yaml -n meterstream
+    - kubectl get ingress -n meterstream
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
