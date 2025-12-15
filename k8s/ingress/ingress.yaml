@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meterstream-ingress
+  namespace: meterstream
+  annotations:
+    # Traefik HTTP entrypoint (port 80)
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+
+    # TODO: Enable HTTPS before Week 3 (required for login security)
+    # Steps:
+    # 1. Verify cert-manager is installed: kubectl get pods -n cert-manager
+    # 2. Get domain name (e.g., meterstream.staging.lnu.se)
+    # 3. Point DNS A record to 192.168.2.34
+    # 4. Uncomment lines below:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+
+  # TODO: Enable TLS/SSL (uncomment after completing steps above)
+  # tls:
+  # - hosts:
+  #   - meterstream.staging.lnu.se  # CHANGE to your domain
+  #   secretName: meterstream-tls
+  rules:
+  # For IP-based access (staging)
+  - http:
+      paths:
+      # Frontend - serves static HTML with HTTP 200
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+
+      # TODO Week 3: Expose API Gateway for frontend login/API calls
+      # Uncomment when:
+      # 1. Gateway service is deployed and tested
+      # 2. Frontend needs to make API calls to /api/auth/login etc.
+      # 3. HTTPS is enabled (required for secure authentication)
+      # Then uncomment lines below:
+      # - path: /api
+      #   pathType: Prefix
+      #   backend:
+      #     service:
+      #       name: gateway
+      #       port:
+      #         number: 8000
