@@ -56,9 +56,9 @@ kubectl -n meterstream get svc processor
 (Optional) Port-forward the service and test endpoints:
 
 ```bash
-kubectl -n meterstream port-forward svc/processor 8001:8001
-curl -sS http://127.0.0.1:8001/health
-curl -sS http://127.0.0.1:8001/ready
+kubectl -n meterstream port-forward svc/processor 8000:8000
+curl -sS http://127.0.0.1:8000/health
+curl -sS http://127.0.0.1:8000/ready
 ```
 
 ## Endpoints
