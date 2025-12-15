@@ -8,5 +8,6 @@ bcrypt==4.0.1
 motor==3.6.0
 python-multipart==0.0.6
 pytest==7.4.3
+pytest-asyncio==0.23.3
 httpx==0.26.0
 slowapi==0.1.9

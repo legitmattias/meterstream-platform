@@ -91,6 +91,18 @@ spec:
                 configMapKeyRef:
                   name: auth-config
                   key: log_level
+
+            # Bootstrap admin (only used if no admin exists)
+            - name: BOOTSTRAP_ADMIN_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: bootstrap_admin_email
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: admin-bootstrap
+                  key: password
           resources:
             requests:
               memory: "128Mi"
