@@ -269,10 +269,10 @@ deploy-auth-staging:
     - require_statefulset mongodb
     
     # Create admin secrets and run bootstrap
-    - kubectl create secret generic admin-bootstrap \
-        --from-literal=password="$STAG_BOOTSTRAP_ADMIN_PASSWORD" \
-        --dry-run=client -o yaml | kubectl apply -f - -n meterstream
-    - kubectl apply -f k8s/auth/
+    - |
+      kubectl -n meterstream create secret generic admin-bootstrap \
+      --from-literal=password="$STAG_BOOTSTRAP_ADMIN_PASSWORD" \
+      --dry-run=client -o yaml | kubectl -n meterstream apply -f -
 
     # Create JWT secret from CI/CD variables (shared with Gateway)
     - |
@@ -514,10 +514,10 @@ deploy-auth-prod:
     - require_statefulset mongodb
 
     # Create admin secrets and run bootstrap
-    - kubectl create secret generic admin-bootstrap \
-        --from-literal=password="$PROD_BOOTSTRAP_ADMIN_PASSWORD" \
-        --dry-run=client -o yaml | kubectl apply -f - -n meterstream
-    - kubectl apply -f k8s/auth/
+    - |
+      kubectl -n meterstream create secret generic admin-bootstrap \
+      --from-literal=password="$PROD_BOOTSTRAP_ADMIN_PASSWORD" \
+      --dry-run=client -o yaml | kubectl -n meterstream apply -f -
 
     - |
       kubectl -n meterstream create secret generic jwt-secret \
