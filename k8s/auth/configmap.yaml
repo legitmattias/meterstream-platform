@@ -16,3 +16,6 @@ data:
   # Service Configuration
   service_name: "auth-service"
   log_level: "INFO"
+
+  # Bootstrap admin
+  bootstrap_admin_email: "admin@meterstream.local"

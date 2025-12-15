@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     debug: bool = True
     log_level: str = "INFO"
 
+    # Bootstrap admin (only used if no admin exists)
+    bootstrap_admin_email: str = "admin@meterstream.local"
+    bootstrap_admin_password: str | None = None
+
 """Singelton pattern, create only once"""
 @lru_cache
 def get_settings() -> Settings:
