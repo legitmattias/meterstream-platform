@@ -21,7 +21,7 @@ spec:
           image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/processor:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 8001
+            - containerPort: 8000
               name: http
           env:
             - name: NATS_URL
@@ -60,13 +60,13 @@ spec:
           readinessProbe:
             httpGet:
               path: /ready
-              port: 8001
+              port: 8000
             initialDelaySeconds: 3
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
               path: /health
-              port: 8001
+              port: 8000
             initialDelaySeconds: 10
             periodSeconds: 30

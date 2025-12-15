@@ -23,19 +23,19 @@ spec:
             - containerPort: 8000
               name: http
           env:
-            # MongoDB connection credentials (from secrets)
+            # MongoDB connection credentials
             - name: MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: mongodb-secret
-                  key: MONGODB_USERNAME
+                  key: username
             - name: MONGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mongodb-secret
-                  key: MONGODB_PASSWORD
+                  key: password
 
-            # MongoDB connection details (from configmap)
+            # MongoDB connection details
             - name: MONGODB_HOST
               valueFrom:
                 configMapKeyRef:
@@ -91,6 +91,18 @@ spec:
                 configMapKeyRef:
                   name: auth-config
                   key: log_level
+
+            # Bootstrap admin (only used if no admin exists)
+            - name: BOOTSTRAP_ADMIN_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: auth-config
+                  key: bootstrap_admin_email
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: admin-bootstrap
+                  key: password
           resources:
             requests:
               memory: "128Mi"

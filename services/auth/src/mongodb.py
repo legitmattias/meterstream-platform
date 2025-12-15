@@ -18,7 +18,7 @@ class MongoDB:
         self.client = AsyncIOMotorClient(settings.mongodb_url)
         # Verify connection
         await self.client.admin.command("ping")
-        logger.info("Connected to MongoDB: %s", settings.mongodb_url)
+        logger.info("Connected to MongoDB database: %s", settings.database_name)
     
     async def disconnect(self):
         """Disconnect from MongoDB."""
