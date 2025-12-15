@@ -172,6 +172,7 @@ build-gateway:
 #   1. Decodes base64-encoded kubeconfig from GitLab CI/CD variable
 #   2. Connects to cluster and verifies connection
 #   3. Creates namespace if it doesn't exist
+#   4. Provides require_running() helper function for dependency checking
 .deploy-base:
   stage: deploy-staging
   image:
@@ -188,6 +189,33 @@ build-gateway:
 
     # Ensure namespace exists
     - kubectl create namespace meterstream || true
+
+    # Define dependency checker function
+    - |
+      require_running() {
+        local service_name=$1
+        echo "Checking dependency: $service_name"
+
+        # Check if deployment exists
+        if ! kubectl get deployment "$service_name" -n meterstream &> /dev/null; then
+          echo "ERROR: Required service '$service_name' is not deployed"
+          echo "Please run 'deploy-${service_name}-staging' job first"
+          exit 1
+        fi
+
+        # Check if it has ready replicas
+        local ready=$(kubectl get deployment "$service_name" -n meterstream -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [ "$ready" -lt 1 ]; then
+          echo "WARNING: Service '$service_name' exists but has 0 ready replicas"
+          echo "Waiting up to 60s for it to become ready..."
+          if ! kubectl wait --for=condition=available --timeout=60s deployment/"$service_name" -n meterstream; then
+            echo "ERROR: Service '$service_name' failed to become ready"
+            exit 1
+          fi
+        fi
+
+        echo "OK: $service_name is running and ready"
+      }
   environment:
     name: staging
 
@@ -276,13 +304,30 @@ deploy-nats-staging:
 #
 # Depends on:
 #   - build-ingestion (optional) - Uses new image if built, otherwise uses latest
-#   - NATS must be running (handled by Kubernetes health checks, not pipeline dependencies)
+#   - NATS must be running and healthy
 deploy-ingestion-staging:
   extends: .deploy-base
   needs:
     - job: build-ingestion
       optional: true  # Can deploy even if build was skipped
+    - job: deploy-nats-staging
+      optional: true  # If NATS is being deployed in this pipeline, wait for it
   script:
+    # Verify required dependencies are running
+    # Note: NATS uses StatefulSet, not Deployment, so we check it separately
+    - |
+      echo "Checking dependency: nats"
+      if ! kubectl get statefulset nats -n meterstream &> /dev/null; then
+        echo "ERROR: Required service 'nats' is not deployed"
+        echo "Please run 'deploy-nats-staging' job first"
+        exit 1
+      fi
+      if ! kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=60s statefulset/nats -n meterstream; then
+        echo "ERROR: NATS StatefulSet failed to become ready"
+        exit 1
+      fi
+      echo "OK: nats is running and ready"
+
     # Apply manifests (service, deployment)
     - kubectl apply -f k8s/ingestion/ -n meterstream
 
@@ -313,7 +358,7 @@ deploy-ingestion-staging:
 #
 # Depends on:
 #   - build-auth (optional) - Uses new image if built, otherwise uses latest
-#   - MongoDB must be running (handled by Kubernetes readiness probes, not pipeline dependencies)
+#   - MongoDB must be running and healthy
 #
 # Post-deployment:
 #   - Verifies /health endpoint (liveness check)
@@ -323,7 +368,24 @@ deploy-auth-staging:
   needs:
     - job: build-auth
       optional: true  # Can deploy even if build was skipped
+    - job: deploy-mongodb-staging
+      optional: true  # If MongoDB is being deployed in this pipeline, wait for it
   script:
+    # Verify required dependencies are running
+    # Note: MongoDB uses StatefulSet, not Deployment, so we check it separately
+    - |
+      echo "Checking dependency: mongodb"
+      if ! kubectl get statefulset mongodb -n meterstream &> /dev/null; then
+        echo "ERROR: Required service 'mongodb' is not deployed"
+        echo "Please run 'deploy-mongodb-staging' job first"
+        exit 1
+      fi
+      if ! kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=120s statefulset/mongodb -n meterstream; then
+        echo "ERROR: MongoDB StatefulSet failed to become ready"
+        exit 1
+      fi
+      echo "OK: mongodb is running and ready"
+
     # Create JWT secret from CI/CD variables (shared with Gateway)
     - |
       kubectl -n meterstream create secret generic jwt-secret \
@@ -358,7 +420,7 @@ deploy-auth-staging:
       kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
         curl -f http://auth.meterstream.svc.cluster.local:8000/ready || exit 1
 
-      echo "✅ Auth service is healthy and ready!"
+      echo "Auth service is healthy and ready"
   rules:
     # Manual trigger only during early development
     # TODO: Enable auto-trigger when stable:
@@ -379,13 +441,46 @@ deploy-auth-staging:
 #
 # Depends on:
 #   - build-processor (optional) - Uses new image if built, otherwise uses latest
-#   - NATS must be running
+#   - NATS must be running and healthy
+#   - InfluxDB must be running and healthy
 deploy-processor-staging:
   extends: .deploy-base
   needs:
     - job: build-processor
       optional: true  # Can deploy even if build was skipped
+    - job: deploy-nats-staging
+      optional: true  # If NATS is being deployed in this pipeline, wait for it
+    - job: deploy-influx-staging
+      optional: true  # If InfluxDB is being deployed in this pipeline, wait for it
   script:
+    # Verify required dependencies are running
+    # Note: NATS and InfluxDB use StatefulSets, not Deployments, so we check them separately
+    - |
+      echo "Checking dependency: nats"
+      if ! kubectl get statefulset nats -n meterstream &> /dev/null; then
+        echo "ERROR: Required service 'nats' is not deployed"
+        echo "Please run 'deploy-nats-staging' job first"
+        exit 1
+      fi
+      if ! kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=60s statefulset/nats -n meterstream; then
+        echo "ERROR: NATS StatefulSet failed to become ready"
+        exit 1
+      fi
+      echo "OK: nats is running and ready"
+
+    - |
+      echo "Checking dependency: influxdb"
+      if ! kubectl get statefulset influxdb -n meterstream &> /dev/null; then
+        echo "ERROR: Required service 'influxdb' is not deployed"
+        echo "Please run 'deploy-influx-staging' job first"
+        exit 1
+      fi
+      if ! kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=120s statefulset/influxdb -n meterstream; then
+        echo "ERROR: InfluxDB StatefulSet failed to become ready"
+        exit 1
+      fi
+      echo "OK: influxdb is running and ready"
+
     # Apply manifests (service, deployment)
     - kubectl apply -f k8s/processor/ -n meterstream
 
@@ -415,13 +510,22 @@ deploy-processor-staging:
 #
 # Depends on:
 #   - build-gateway (optional) - Uses new image if built, otherwise uses latest
-#   - Auth service must be running (handled by Kubernetes service discovery, not pipeline dependencies)
+#   - Auth service must be running and healthy
+#   - Ingestion service must be running and healthy
 deploy-gateway-staging:
   extends: .deploy-base
   needs:
     - job: build-gateway
       optional: true  # Can deploy even if build was skipped
+    - job: deploy-auth-staging
+      optional: true  # If auth is being deployed in this pipeline, wait for it
+    - job: deploy-ingestion-staging
+      optional: true  # If ingestion is being deployed in this pipeline, wait for it
   script:
+    # Verify required dependencies are running
+    - require_running auth
+    - require_running ingestion
+
     # Apply manifests (secret, service, deployment)
     - kubectl apply -f k8s/gateway/ -n meterstream
 
