@@ -43,3 +43,14 @@ def test_to_influx_line_protocol_contains_expected_parts_and_timestamp():
     )
 
     assert f"power_consumption=0.0112 {expected_ts_ns}" in line
+
+def test_to_influx_line_protocol_allows_negative():
+    reading = MeterReading(
+        DateTime=datetime(2020, 1, 1, 0, 0, 0),
+        CUSTOMER="106",
+        AREA="Kvarnholmen",
+        Power_Consumption=-1.0,
+    )
+
+    line = _to_influx_line_protocol(reading)
+    assert "power_consumption=-1.0" in line
