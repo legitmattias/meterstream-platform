@@ -1,24 +1,35 @@
 from datetime import datetime, timedelta, UTC
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 
 from .config import get_settings
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 settings = get_settings()
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return pwd_context.hash(password)
+    """
+    Hash a password using bcrypt.
+
+    Uses bcrypt directly instead of passlib to avoid Python 3.13 deprecation warning.
+    Default cost factor is 12 rounds (2^12 iterations).
+    """
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """
+    Verify a password against a bcrypt hash.
+
+    Uses constant-time comparison to prevent timing attacks.
+    """
+    password_bytes = plain_password.encode('utf-8')
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
 def create_access_token(user_id: str, email: str, role: str, customer_id: Optional[str] = None) -> tuple[str, int]:

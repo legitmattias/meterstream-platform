@@ -50,21 +50,24 @@ spec:
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 30
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 3
           readinessProbe:
             exec:
               command:
                 - mongosh
                 - --eval
                 - "db.adminCommand('ping')"
-            initialDelaySeconds: 5
+            initialDelaySeconds: 30
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 3
   volumeClaimTemplates:
     - metadata:
         name: mongodb-data
       spec:
         accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path  # K3s default storage class
         resources:
           requests:
             storage: 1Gi

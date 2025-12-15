@@ -38,6 +38,74 @@ services:
     volumes:
       - influxdb-data:/var/lib/influxdb2
 
+  mongodb:
+    image: mongo:7
+    container_name: meterstream-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-password}
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: meterstream-auth
+    ports:
+      - "8001:8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGODB_URL: mongodb://${MONGODB_USERNAME:-admin}:${MONGODB_PASSWORD:-password}@mongodb:27017/?authSource=admin
+      DATABASE_NAME: meterstream_auth
+      JWT_SECRET: ${JWT_SECRET:-test-secret-for-local-dev}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 60
+      JWT_REFRESH_EXPIRE_DAYS: 7
+      SERVICE_NAME: auth-service
+      DEBUG: "true"
+      LOG_LEVEL: INFO
+
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: meterstream-gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-test-secret-for-local-dev}
+      JWT_ALGORITHM: HS256
+      AUTH_SERVICE_URL: http://auth:8000
+      INGESTION_SERVICE_URL: http://ingestion:8000
+      LOG_LEVEL: INFO
+
+  ingestion:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: meterstream-ingestion
+    ports:
+      - "8002:8000"
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: INFO
+
 volumes:
   nats-data:
   influxdb-data:
+  mongodb-data:

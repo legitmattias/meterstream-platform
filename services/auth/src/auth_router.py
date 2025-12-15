@@ -24,6 +24,7 @@ from .jwt_service import (
     verify_refresh_token
 )
 from .mongodb import get_users_collection
+from .security import validate_object_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -32,27 +33,31 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 limiter = Limiter(key_func=get_remote_address)
 
 
+# ============================================================================
+# ENDPOINTS
+# ============================================================================
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")  # Max 5 registrations per minute per IP
 async def register(request: Request, user_data: UserRegister, users=Depends(get_users_collection)):
     """
     Register a new user.
-    
+
     - Checks if email already exists
     - Hashes password
     - Saves user to MongoDB
     """
+    # TODO: SECURITY - Add input validation if we keep email-based authentication
+    # Currently relying on Pydantic's EmailStr validation
+
     # Check if user already exists
     existing_user = await users.find_one({"email": user_data.email})
     if existing_user:
         # Audit log for duplicate registration attempt
         logger.warning(
             "Duplicate registration attempt",
-            extra={
-                "email": user_data.email,
-                "ip": request.client.host if request.client else "unknown",
-                "user_agent": request.headers.get("user-agent", "unknown")
-            }
+            extra={"email": user_data.email, **get_client_info(request)}
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -91,8 +96,7 @@ async def register(request: Request, user_data: UserRegister, users=Depends(get_
         extra={
             "email": user_data.email,
             "user_id": str(result.inserted_id),
-            "ip": request.client.host if request.client else "unknown",
-            "user_agent": request.headers.get("user-agent", "unknown")
+            **get_client_info(request)
         }
     )
 
@@ -136,9 +140,8 @@ async def login(request: Request, user_data: UserLogin, users=Depends(get_users_
             "Failed login attempt",
             extra={
                 "email": user_data.email,
-                "ip": request.client.host if request.client else "unknown",
-                "user_agent": request.headers.get("user-agent", "unknown"),
-                "reason": "invalid_credentials"
+                "reason": "invalid_credentials",
+                **get_client_info(request)
             }
         )
         raise HTTPException(
@@ -147,100 +150,61 @@ async def login(request: Request, user_data: UserLogin, users=Depends(get_users_
         )
 
     # Create tokens
-    access_token, expires_in = create_access_token(
-        user_id=str(user["_id"]),
+    user_id = str(user["_id"])
+    tokens = create_token_pair(
+        user_id=user_id,
         email=user["email"],
         role=user.get("role", "customer"),
         customer_id=user.get("customer_id")
     )
-    refresh_token = create_refresh_token(user_id=str(user["_id"]))
 
     # Audit log for successful login
     logger.info(
         "Successful login",
         extra={
             "email": user_data.email,
-            "user_id": str(user["_id"]),
-            "ip": request.client.host if request.client else "unknown",
-            "user_agent": request.headers.get("user-agent", "unknown")
+            "user_id": user_id,
+            **get_client_info(request)
         }
     )
 
-    return TokenPairResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=expires_in
-    )
+    return tokens
 
 @router.post("/refresh", response_model=TokenPairResponse)
-@limiter.limit("20/minute")  # Max 20 refresh requests per minute per IP
+@limiter.limit("5/hour")  # Max 5 refresh requests per hour per IP (access tokens expire every 60 min)
 async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depends(get_users_collection)):
     """
     Get new access token using refresh token.
+
+    TODO: SECURITY - Implement Refresh Token Rotation
+    Current: Refresh tokens can be reused unlimited times for 7 days
+    Problem: Stolen token = attacker can generate unlimited JWTs for 7 days
+    Solution: One-time use refresh tokens
+      - Each refresh token can only be used ONCE
+      - Returns new access token + NEW refresh token
+      - Reuse detection = security alert + revoke all user tokens
+      - Requires: MongoDB collection to track used tokens
+    Or remove refresh token??
     """
     # Verify refresh token
     user_id = verify_refresh_token(token_data.refresh_token)
     if not user_id:
-        logger.warning(
-            "Invalid refresh token attempt",
-            extra={
-                "ip": request.client.host if request.client else "unknown"
-            }
-        )
+        logger.warning("Invalid refresh token attempt", extra=get_client_info(request))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
 
-    # Get user from database with exception handling
-    try:
-        user = await users.find_one({"_id": ObjectId(user_id)})
-    except InvalidId:
-        logger.warning(
-            "Invalid ObjectId in refresh token",
-            extra={
-                "user_id": user_id,
-                "ip": request.client.host if request.client else "unknown"
-            }
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
-        )
-    except Exception as e:
-        logger.error(
-            "Database error in /refresh endpoint",
-            extra={
-                "error": str(e),
-                "user_id": user_id
-            }
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
-        )
-
-    if not user:
-        logger.warning(
-            "Refresh token references non-existent user",
-            extra={
-                "user_id": user_id,
-                "ip": request.client.host if request.client else "unknown"
-            }
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
+    # Get user with validation
+    user = await get_user_by_id(user_id, users, request)
 
     # Create new tokens
-    access_token, expires_in = create_access_token(
+    tokens = create_token_pair(
         user_id=user_id,
         email=user["email"],
         role=user.get("role", "customer"),
         customer_id=user.get("customer_id")
     )
-    refresh_token = create_refresh_token(user_id=user_id)
 
     # Audit log for token refresh
     logger.info(
@@ -248,15 +212,11 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
         extra={
             "email": user["email"],
             "user_id": user_id,
-            "ip": request.client.host if request.client else "unknown"
+            **get_client_info(request)
         }
     )
 
-    return TokenPairResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=expires_in
-    )
+    return tokens
 
 @router.get("/me", response_model=UserResponse)
 @limiter.limit("30/minute")  # Max 30 requests per minute per IP
@@ -296,7 +256,7 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    # Get user from database
+    # Get user ID from token
     user_id = payload.get("user_id")
     if not user_id:
         raise HTTPException(
@@ -304,49 +264,8 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
             detail="Invalid token payload"
         )
 
-    # SECURITY: Specific exception handling to prevent IDOR attacks
-    try:
-        user = await users.find_one({"_id": ObjectId(user_id)})
-    except InvalidId:
-        # Invalid ObjectId format - potential attack
-        logger.warning(
-            "Invalid ObjectId in token",
-            extra={
-                "user_id": user_id,
-                "ip": request.client.host if request.client else "unknown"
-            }
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-    except Exception as e:
-        # Unexpected database error
-        logger.error(
-            "Database error in /me endpoint",
-            extra={
-                "error": str(e),
-                "user_id": user_id
-            }
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
-        )
-
-    if not user:
-        # Valid ObjectId but user doesn't exist (deleted account?)
-        logger.warning(
-            "Token references non-existent user",
-            extra={
-                "user_id": user_id,
-                "ip": request.client.host if request.client else "unknown"
-            }
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
+    # Get user with validation (DRY - uses helper function)
+    user = await get_user_by_id(user_id, users, request)
 
     # Audit log for successful user info retrieval
     logger.info(
@@ -354,7 +273,7 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
         extra={
             "email": user["email"],
             "user_id": user_id,
-            "ip": request.client.host if request.client else "unknown"
+            **get_client_info(request)
         }
     )
 
@@ -367,33 +286,84 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
         customer_id=user.get("customer_id")
     )
 
-# # TODO: MIGRATE TO API GATEWAY
-# # This endpoint should be moved to the API Gateway service
-# # The API Gateway will be responsible for verifying JWT tokens for all incoming requests
-# @router.get("/verify", response_model=VerifyResponse)
-# async def verify(token: str):
-#     """
-#     Verify a JWT token.
 
-#     - Used by API Gateway to validate requests
-#     - Returns user info if valid
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
-#     NOTE: This endpoint will be migrated to API Gateway in the future
-#     """
-#     payload = verify_token(token)
+def get_client_info(request: Request) -> dict:
+    """Extract client IP and user agent from request for logging."""
+    return {
+        "ip": request.client.host if request.client else "unknown",
+        "user_agent": request.headers.get("user-agent", "unknown")
+    }
 
-#     if not payload:
-#         logger.warning("Token verification failed - invalid or expired token")
-#         return VerifyResponse(valid=False)
 
-#     # Don't accept refresh tokens for verification
-#     if payload.get("type") == "refresh":
-#         return VerifyResponse(valid=False)
+async def get_user_by_id(user_id: str, users, request: Request) -> dict:
+    """
+    Get user from database by ID with validation and error handling.
 
-#     return VerifyResponse(
-#         valid=True,
-#         user_id=payload["user_id"],
-#         email=payload["email"],
-#         role=payload["role"],
-#         customer_id=payload.get("customer_id")
-#     )
+    Validates ObjectId format, handles database errors, and logs security events.
+    Returns user document or raises HTTPException.
+    """
+    # SECURITY: Validate ObjectId format before database query
+    if not validate_object_id(user_id):
+        logger.warning(
+            "Invalid ObjectId format",
+            extra={"user_id": user_id, **get_client_info(request)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+    # Get user from database with exception handling
+    try:
+        user = await users.find_one({"_id": ObjectId(user_id)})
+    except InvalidId:
+        logger.warning(
+            "Invalid ObjectId",
+            extra={"user_id": user_id, **get_client_info(request)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+    except Exception as e:
+        logger.error(
+            "Database error",
+            extra={"error": str(e), "user_id": user_id}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+    if not user:
+        logger.warning(
+            "User not found",
+            extra={"user_id": user_id, **get_client_info(request)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    return user
+
+
+def create_token_pair(user_id: str, email: str, role: str, customer_id: Optional[str]) -> TokenPairResponse:
+    """Create access and refresh tokens for a user."""
+    access_token, expires_in = create_access_token(
+        user_id=user_id,
+        email=email,
+        role=role,
+        customer_id=customer_id
+    )
+    refresh_token = create_refresh_token(user_id=user_id)
+
+    return TokenPairResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=expires_in
+    )
