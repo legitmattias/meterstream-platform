@@ -1,0 +1,18 @@
+#Innehåller dashboards som JSON (exporterade från Grafana GUI).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+data:
+  aggregate-consumption.json: |
+    #PLACEHOLDER:
+    {}
+  monthly-consumption.json: |
+    #PLACEHOLDER: 
+    {}
+  raw-vs-processed.json: |
+    #PLACEHOLDER: 
+    {}
+  hourly-trends.json: |
+    #PLACEHOLDER:
+    {}
