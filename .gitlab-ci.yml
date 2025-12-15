@@ -1,39 +1,36 @@
 # ==============================================================================
 # GitLab CI/CD Pipeline for MeterStream
 # ==============================================================================
-# This pipeline builds Docker images and deploys services to Kubernetes
+# Builds Docker images and deploys services to Kubernetes
+#
+# Branch Strategy:
+#   - development → Staging environment
+#   - main → Production environment (via git tags)
 #
 # Stages:
-#   1. test-connection - Verify kubectl can connect to K8s cluster
-#   2. build          - Build Docker images with Kaniko
-#   3. deploy-staging - Deploy to staging environment
-#   4. deploy-prod    - TBC
-#
-# Triggers:
-#   - Automatic: When code changes in relevant directories (development branch bortkommenterat för nu!!)
-#   - Manual: Can be triggered manually for any job
+#   1. test-connection - Verify kubectl connectivity
+#   2. build           - Build Docker images with Kaniko
+#   3. deploy-staging  - Deploy to staging (manual)
+#   4. deploy-prod     - Deploy to production (git tags only)
 # ==============================================================================
 
 stages:
   - test-connection
   - build
   - deploy-staging
+  - deploy-prod
 
 # ------------------------------------------------------------------------------
-# Cache Configuration
+# Global Variables
 # ------------------------------------------------------------------------------
-# Caches kubectl binaries between pipeline runs to speed up deployment jobs
-.kubectl-cache:
-  cache:
-    key: kubectl-binary
-    paths:
-      - .kubectl-cache/
+variables:
+  IMAGE_BASE: ${CI_REGISTRY_IMAGE}  # GitLab registry URL
+  TAG: ${CI_COMMIT_SHORT_SHA}       # Short git commit SHA
 
-# ------------------------------------------------------------------------------
-# Test Connection to Staging Cluster
-# ------------------------------------------------------------------------------
-# Verifies that GitLab can connect to the Kubernetes cluster
-# Run this manually if you want to test the connection
+# ==============================================================================
+# TEST CONNECTION
+# ==============================================================================
+
 test-staging-connection:
   stage: test-connection
   image:
@@ -45,12 +42,9 @@ test-staging-connection:
     - kubectl config current-context
     - kubectl get nodes
   rules:
-    - when: manual  # Only runs when manually triggered
+    - when: manual
 
-# ------------------------------------------------------------------------------
-# Test Connection to Production Cluster (Disabled)
-# ------------------------------------------------------------------------------
-# test-production-connection:
+# test-prod-connection:
 #   stage: test-connection
 #   image:
 #     name: bitnami/kubectl:latest
@@ -61,42 +55,18 @@ test-staging-connection:
 #     - kubectl config current-context
 #     - kubectl get nodes
 #   rules:
-#     - when: always
-
-# ------------------------------------------------------------------------------
-# Global Variables
-# ------------------------------------------------------------------------------
-variables:
-  IMAGE_BASE: ${CI_REGISTRY_IMAGE}  # GitLab registry URL
-  TAG: ${CI_COMMIT_SHORT_SHA}       # Short git commit SHA (e.g., "a1b2c3d")
+#     - when: manual
 
 # ==============================================================================
-# BUILD STAGE - Docker Image Building
+# BUILD
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# Build Template (Reusable for all services)
-# ------------------------------------------------------------------------------
-# Uses Kaniko to build Docker images
-#
-# Features:
-#   - Builds from services/${SERVICE_NAME}/Dockerfile
-#   - Tags with both commit SHA and "latest"
-#   - Layer caching enabled (7 days TTL)
-#   - Only builds when relevant files change
-#
-# How it works:
-#   1. Authenticates to GitLab Container Registry
-#   2. Builds Docker image using Kaniko (no Docker daemon needed)
-#   3. Pushes to registry with two tags: ${TAG} and latest
-#   4. Uses layer cache to speed up subsequent builds
 .build:
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
   script:
-    # Create Docker auth config for pushing to GitLab registry
     - mkdir -p /kaniko/.docker
     - |
       cat > /kaniko/.docker/config.json <<EOF
@@ -109,70 +79,51 @@ variables:
         }
       }
       EOF
-    # Build and push Docker image
     - |
+      # Determine destinations based on context
+      DESTINATIONS="--destination ${IMAGE_BASE}/${SERVICE_NAME}:${TAG}"
+      DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/${SERVICE_NAME}:latest"
+
+      # If this is a version tag, also tag with the version
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/${SERVICE_NAME}:${CI_COMMIT_TAG}"
+      fi
+
       /kaniko/executor \
         --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}" \
         --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile" \
-        --destination "${IMAGE_BASE}/${SERVICE_NAME}:${TAG}" \
-        --destination "${IMAGE_BASE}/${SERVICE_NAME}:latest" \
+        $DESTINATIONS \
         --cache=true \
         --cache-ttl=168h
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - services/${SERVICE_NAME}/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/' # always build if git tag
+      when: always
 
-# ------------------------------------------------------------------------------
-# Build: Ingestion Service
-# ------------------------------------------------------------------------------
 build-ingestion:
   extends: .build
   variables:
-    SERVICE_NAME: ingestion  # Builds from services/ingestion/
+    SERVICE_NAME: ingestion
 
-# ------------------------------------------------------------------------------
-# Build: Auth Service
-# ------------------------------------------------------------------------------
 build-auth:
   extends: .build
   variables:
-    SERVICE_NAME: auth  # Builds from services/auth/
+    SERVICE_NAME: auth
 
-# ------------------------------------------------------------------------------
-# Build: Processor Service
-# ------------------------------------------------------------------------------
 build-processor:
   extends: .build
   variables:
-    SERVICE_NAME: processor  # Builds from services/processor/
+    SERVICE_NAME: processor
 
-# # ------------------------------------------------------------------------------
-# Build: Gateway Service
-# ------------------------------------------------------------------------------
 build-gateway:
   extends: .build
   variables:
-    SERVICE_NAME: gateway  # Builds from services/gateway/
+    SERVICE_NAME: gateway
 
 # ==============================================================================
-# DEPLOY STAGE - Kubernetes Deployment
+# DEPLOY STAGING
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# Deploy Template (Reusable for all deployments)
-# ------------------------------------------------------------------------------
-# Sets up kubectl connection to Kubernetes cluster
-#
-# Before every deployment job:
-#   1. Decodes base64-encoded kubeconfig from GitLab CI/CD variable
-#   2. Connects to cluster and verifies connection
-#   3. Creates namespace if it doesn't exist
-#   4. Provides require_running() helper function for dependency checking
 .deploy-base:
   stage: deploy-staging
   image:
@@ -244,22 +195,10 @@ build-gateway:
   environment:
     name: staging
 
-# ------------------------------------------------------------------------------
-# Deploy: MongoDB Database
-# ------------------------------------------------------------------------------
-# Deploys MongoDB StatefulSet with persistent storage
-#
-# What it deploys:
-#   - Secret: MongoDB credentials (from CI/CD variables)
-#   - Service: Headless service for StatefulSet
-#   - StatefulSet: MongoDB with persistent volume
-#
-# Note: Uses StatefulSet (not Deployment) because MongoDB needs stable storage
+# MongoDB - StatefulSet with persistent storage
 deploy-mongodb-staging:
   extends: .deploy-base
   script:
-    # Note: MongoDB credentials are created ONCE manually or on first deploy
-
     # Create/Update MongoDB secret from CI/CD variables (only if it doesn't exist or needs update)
     - |
       kubectl -n meterstream create secret generic mongodb-secret \
@@ -284,23 +223,9 @@ deploy-mongodb-staging:
         exit 1
       )
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/mongoDB/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
 
-# ------------------------------------------------------------------------------
-# Deploy: NATS Message Queue
-# ------------------------------------------------------------------------------
-# Deploys NATS StatefulSet for message queuing
-#
-# What it deploys:
-#   - ConfigMap: NATS configuration
-#   - Service: NATS service for client connections
-#   - StatefulSet: NATS with persistent storage
+# NATS - Message queue
 deploy-nats-staging:
   extends: .deploy-base
   script:
@@ -310,26 +235,9 @@ deploy-nats-staging:
     # Wait for StatefulSet to be ready (max 2 minutes)
     - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/nats/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
 
-# ------------------------------------------------------------------------------
-# Deploy: Ingestion Service
-# ------------------------------------------------------------------------------
-# Deploys the ingestion service that receives meter data
-#
-# What it deploys:
-#   - Deployment: Ingestion service pods
-#   - Service: LoadBalancer for external access
-#
-# Depends on:
-#   - build-ingestion (optional) - Uses new image if built, otherwise uses latest
-#   - NATS must be running and healthy
+# Ingestion - Receives meter data (depends on: NATS)
 deploy-ingestion-staging:
   extends: .deploy-base
   needs:
@@ -348,32 +256,9 @@ deploy-ingestion-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/ingestion/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
 
-# ------------------------------------------------------------------------------
-# Deploy: Auth Service
-# ------------------------------------------------------------------------------
-# Deploys the authentication service with JWT tokens
-#
-# What it deploys:
-#   - Secret: JWT secret key
-#   - ConfigMap: MongoDB connection URL
-#   - Service: Internal ClusterIP service on port 8001
-#   - Deployment: Auth service pods (2 replicas)
-#
-# Depends on:
-#   - build-auth (optional) - Uses new image if built, otherwise uses latest
-#   - MongoDB must be running and healthy
-#
-# Post-deployment:
-#   - Verifies /health endpoint (liveness check)
-#   - Verifies /ready endpoint (MongoDB connection check)
+# Auth - JWT authentication (depends on: MongoDB)
 deploy-auth-staging:
   extends: .deploy-base
   needs:
@@ -419,27 +304,9 @@ deploy-auth-staging:
 
       echo "Auth service is healthy and ready"
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/auth/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
 
-# ------------------------------------------------------------------------------
-# Deploy: Processor Service
-# ------------------------------------------------------------------------------
-# Deploys the processor service that processes meter data from NATS
-#
-# What it deploys:
-#   - Deployment: Processor service pods
-#   - Service: Internal ClusterIP service
-#
-# Depends on:
-#   - build-processor (optional) - Uses new image if built, otherwise uses latest
-#   - NATS must be running and healthy
-#   - InfluxDB must be running and healthy
+# Processor - Processes meter data (depends on: NATS, InfluxDB)
 deploy-processor-staging:
   extends: .deploy-base
   needs:
@@ -459,28 +326,9 @@ deploy-processor-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/processor/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
 
-# ------------------------------------------------------------------------------
-# Deploy: Gateway Service
-# ------------------------------------------------------------------------------
-# Deploys the API gateway with JWT authentication
-#
-# What it deploys:
-#   - Secret: JWT secret key
-#   - Service: LoadBalancer service for external access
-#   - Deployment: Gateway service pods
-#
-# Depends on:
-#   - build-gateway (optional) - Uses new image if built, otherwise uses latest
-#   - Auth service must be running and healthy
-#   - Ingestion service must be running and healthy
+# Gateway - API gateway (depends on: Auth, Ingestion)
 deploy-gateway-staging:
   extends: .deploy-base
   needs:
@@ -500,25 +348,9 @@ deploy-gateway-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/gateway/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
 
-# ------------------------------------------------------------------------------
-# Deploy: InfluxDB Time-Series Database
-# ------------------------------------------------------------------------------
-# Deploys InfluxDB StatefulSet for time-series data storage
-#
-# What it deploys:
-#   - Secret: InfluxDB initialization credentials (from CI/CD variables)
-#   - Service: InfluxDB service for client connections
-#   - StatefulSet: InfluxDB with persistent storage
-#
-# Note: Uses StatefulSet (not Deployment) because InfluxDB needs stable storage
+# InfluxDB - Time-series database
 deploy-influx-staging:
   extends: .deploy-base
   script:
@@ -540,147 +372,234 @@ deploy-influx-staging:
     # Wait for StatefulSet to be ready (max 3 minutes)
     - kubectl -n meterstream rollout status statefulset/influxdb --timeout=180s
   rules:
-    # Manual trigger only during early development
-    # TODO: Enable auto-trigger when stable:
-    #   - if: '$CI_COMMIT_BRANCH == "development"'
-    #     changes:
-    #       - k8s/influx/**/*
-    #       - .gitlab-ci.yml
-    - when: manual  # Always manual for now
+    - when: manual
 
 
-# ------------------------------
-# Deploy to prod
-# ------------------------------
+# ==============================================================================
+# DEPLOY PRODUCTION
+# ==============================================================================
 
-# stages:
-#   - build
-#   - deploy-staging
-#   - deploy-production
+.deploy-base-prod:
+  stage: deploy-prod
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  before_script:
+    # Setup kubectl authentication for PRODUCTION
+    - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG=$PWD/kubeconfig
 
-# variables:
-#   IMAGE_BASE: ${CI_REGISTRY_IMAGE} # = gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/"SERVICE":latest
-#   TAG: ${CI_COMMIT_SHORT_SHA} # = e.g., "a1b2c3d"
+    # Verify connection
+    - kubectl config current-context
+    - kubectl get nodes
 
-# # ------------------------------
-# # Build Template
-# # ------------------------------
-# .build:
-#   stage: build
-#   image:
-#     name: gcr.io/kaniko-project/executor:debug
-#     entrypoint: [""]
-#   script:
-#     - mkdir -p /kaniko/.docker
-#     - |
-#       cat > /kaniko/.docker/config.json <<EOF
-#       {
-#         "auths": {
-#           "$CI_REGISTRY": {
-#             "username": "$CI_REGISTRY_USER",
-#             "password": "$CI_REGISTRY_PASSWORD"
-#           }
-#         }
-#       }
-#       EOF
-#     - /kaniko/executor
-#       --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}"
-#       --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile"
-#       --destination "${IMAGE_BASE}/${SERVICE_NAME}:${TAG}"
-#       --destination "${IMAGE_BASE}/${SERVICE_NAME}:latest"
-#   rules:
-#     - if: '$CI_COMMIT_BRANCH == "main"'
+    # Ensure namespace exists
+    - kubectl create namespace meterstream || true
 
-# build-ingestion:
-#   extends: .build
-#   variables:
-#     SERVICE_NAME: ingestion
+    # Define dependency checker functions
+    - |
+      require_running() {
+        local service_name=$1
+        echo "Checking dependency: $service_name"
 
-# build-processor:
-#   extends: .build
-#   variables:
-#     SERVICE_NAME: processor
+        if ! kubectl get deployment "$service_name" -n meterstream &> /dev/null; then
+          echo "ERROR: Required service '$service_name' is not deployed"
+          echo "Please run 'deploy-${service_name}-prod' job first"
+          exit 1
+        fi
 
-# build-auth:
-#   extends: .build
-#   variables:
-#     SERVICE_NAME: auth
+        local ready=$(kubectl get deployment "$service_name" -n meterstream -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [ "$ready" -lt 1 ]; then
+          echo "WARNING: Service '$service_name' exists but has 0 ready replicas"
+          echo "Waiting up to 60s for it to become ready..."
+          if ! kubectl wait --for=condition=available --timeout=60s deployment/"$service_name" -n meterstream; then
+            echo "ERROR: Service '$service_name' failed to become ready"
+            exit 1
+          fi
+        fi
 
-# build-gateway:
-#   extends: .build
-#   variables:
-#     SERVICE_NAME: gateway
+        echo "OK: $service_name is running and ready"
+      }
 
-# # ------------------------------
-# # Deploy to Staging (Manual)
-# # ------------------------------
-# deploy-staging:
-#   stage: deploy-staging
-#   image:
-#     name: bitnami/kubectl:latest
-#     entrypoint: [""]
-#   needs:
-#     - build-ingestion
-#     - build-processor
-#     - build-auth
-#     - build-gateway
-#   script:
-#     - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
-#     - export KUBECONFIG=$PWD/kubeconfig
+      require_statefulset() {
+        local service_name=$1
+        echo "Checking dependency: $service_name"
 
-#     # Sanity check
-#     - kubectl config current-context
-#     - kubectl get nodes
+        if ! kubectl get statefulset "$service_name" -n meterstream &> /dev/null; then
+          echo "ERROR: Required service '$service_name' is not deployed"
+          echo "Please run 'deploy-${service_name}-prod' job first"
+          exit 1
+        fi
 
-#     # Deploy
-#     - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
-#     - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
-#     - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
-#     - kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${TAG}"
+        local ready=$(kubectl get statefulset "$service_name" -n meterstream -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [ "$ready" -lt 1 ]; then
+          echo "WARNING: Service '$service_name' exists but has 0 ready replicas"
+          echo "Waiting up to 60s for it to become ready..."
+          if ! kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=60s statefulset/"$service_name" -n meterstream; then
+            echo "ERROR: Service '$service_name' failed to become ready"
+            exit 1
+          fi
+        fi
 
-#     # Wait for rollouts
-#     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
-#     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
-#     - kubectl -n meterstream rollout status deploy/auth --timeout=120s
-#     - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
-#   environment:
-#     name: staging
-#   rules:
-#     - if: '$CI_COMMIT_BRANCH == "main"'
-#       when: manual
+        echo "OK: $service_name is running and ready"
+      }
+  environment:
+    name: production
 
-# # ------------------------------
-# # Deploy to Production (Manual)
-# # ------------------------------
-# deploy-production:
-#   stage: deploy-production
-#   image:
-#     name: bitnami/kubectl:latest
-#     entrypoint: [""]
-#   needs:
-#     - deploy-staging
-#   script:
-#     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
-#     - export KUBECONFIG=$PWD/kubeconfig
+# MongoDB - StatefulSet with persistent storage
+deploy-mongodb-prod:
+  extends: .deploy-base-prod
+  script:
+    - |
+      kubectl -n meterstream create secret generic mongodb-secret \
+        --from-literal=username="$MONGODB_USERNAME" \
+        --from-literal=password="$MONGODB_PASSWORD_PROD" \
+        --dry-run=client -o yaml | kubectl apply -f -
 
-#     # Sanity check
-#     - kubectl config current-context
-#     - kubectl get nodes
+    - kubectl apply -f k8s/mongoDB/service.yaml -n meterstream
+    - kubectl apply -f k8s/mongoDB/statefulset.yaml -n meterstream
 
-#     # Deploy
-#     - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
-#     - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
-#     - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
-#     - kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${TAG}"
+    - kubectl -n meterstream rollout status statefulset/mongodb --timeout=180s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
 
-#     # Wait for rollouts
-#     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
-#     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
-#     - kubectl -n meterstream rollout status deploy/auth --timeout=120s
-#     - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
-#   environment:
-#     name: production
-#   rules:
-#     - if: '$CI_COMMIT_BRANCH == "main"'
-#       when: manual
-# ```
+# NATS - Message queue
+deploy-nats-prod:
+  extends: .deploy-base-prod
+  script:
+    - kubectl apply -f k8s/nats/ -n meterstream
+    - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# InfluxDB - Time-series database
+deploy-influx-prod:
+  extends: .deploy-base-prod
+  script:
+    - |
+      kubectl -n meterstream create secret generic influxdb-init \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$PROD_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$PROD_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$PROD_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$PROD_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$PROD_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$PROD_INFLUXDB_INIT_ADMIN_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$PROD_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    - kubectl -n meterstream apply -f k8s/influx/influx.yaml
+    - kubectl -n meterstream rollout status statefulset/influxdb --timeout=180s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Auth - JWT authentication (depends on: MongoDB)
+deploy-auth-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-auth
+      optional: true
+  script:
+    - require_statefulset mongodb
+
+    - |
+      kubectl -n meterstream create secret generic jwt-secret \
+        --from-literal=JWT_SECRET="$JWT_SECRET_PROD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
+    - kubectl apply -f k8s/auth/service.yaml -n meterstream
+    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/auth --timeout=120s
+
+    - sleep 10
+    - kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
+        curl -f http://auth.meterstream.svc.cluster.local:8000/health || exit 1
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Ingestion - Receives meter data (depends on: NATS)
+deploy-ingestion-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-ingestion
+      optional: true
+  script:
+    - require_statefulset nats
+
+    - kubectl apply -f k8s/ingestion/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Processor - Processes meter data (depends on: NATS, InfluxDB)
+deploy-processor-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-processor
+      optional: true
+  script:
+    - require_statefulset nats
+    - require_statefulset influxdb
+
+    - kubectl apply -f k8s/processor/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/processor --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Gateway - API gateway (depends on: Auth, Ingestion)
+deploy-gateway-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-gateway
+      optional: true
+  script:
+    - require_running auth
+    - require_running ingestion
+
+    - kubectl apply -f k8s/gateway/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
