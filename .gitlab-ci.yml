@@ -467,7 +467,6 @@ deploy-mongodb-prod:
 
     - kubectl -n meterstream rollout status statefulset/mongodb --timeout=180s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
@@ -478,7 +477,6 @@ deploy-nats-prod:
     - kubectl apply -f k8s/nats/ -n meterstream
     - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
@@ -500,7 +498,6 @@ deploy-influx-prod:
     - kubectl -n meterstream apply -f k8s/influx/influx.yaml
     - kubectl -n meterstream rollout status statefulset/influxdb --timeout=180s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
@@ -542,7 +539,6 @@ deploy-auth-prod:
     - kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
         curl -f http://auth.meterstream.svc.cluster.local:8000/health || exit 1
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
@@ -567,7 +563,6 @@ deploy-ingestion-prod:
 
     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
@@ -593,7 +588,6 @@ deploy-processor-prod:
 
     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
@@ -619,6 +613,5 @@ deploy-gateway-prod:
 
     - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual

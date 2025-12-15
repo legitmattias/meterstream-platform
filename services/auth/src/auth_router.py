@@ -24,7 +24,6 @@ from .jwt_service import (
     verify_refresh_token
 )
 from .mongodb import get_users_collection
-from .security import validate_object_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -307,7 +306,8 @@ async def get_user_by_id(user_id: str, users, request: Request) -> dict:
     Returns user document or raises HTTPException.
     """
     # SECURITY: Validate ObjectId format before database query
-    if not validate_object_id(user_id):
+    # Check if string is 24 hex characters (valid MongoDB ObjectId format)
+    if not user_id or len(user_id) != 24 or not all(c in '0123456789abcdefABCDEF' for c in user_id):
         logger.warning(
             "Invalid ObjectId format",
             extra={"user_id": user_id, **get_client_info(request)}
