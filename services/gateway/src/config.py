@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Backend service URLs (K8s service DNS names)
     auth_service_url: str = "http://auth:8000"
     ingestion_service_url: str = "http://ingestion:8000"
+    grafana_service_url: str = "http://grafana:3000"
 
     log_level: str = "INFO"
 
