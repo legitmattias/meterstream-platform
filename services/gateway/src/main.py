@@ -122,26 +122,13 @@ async def auth_proxy(request: Request, path: str):
     return await proxy_request(request, target_url)
 
 
-# Ingestion routes - JWT validation required
-@app.api_route(
-    "/api/ingest/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-)
-async def ingest_proxy(request: Request, path: str):
-    """Proxy requests to Ingestion Service with JWT validation."""
-    token_payload = await validate_jwt(request)
-    target_url = f"{settings.ingestion_service_url}/{path}"
-    logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
-    return await proxy_request(request, target_url, token_payload)
-
-
-# Root ingest endpoint (for /api/ingest without trailing path)
+# Ingestion route - JWT validation required
 @app.api_route(
     "/api/ingest",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    methods=["POST"],
 )
-async def ingest_proxy_root(request: Request):
-    """Proxy requests to Ingestion Service root with JWT validation."""
+async def ingest_proxy(request: Request):
+    """Proxy requests to Ingestion Service with JWT validation."""
     token_payload = await validate_jwt(request)
     target_url = f"{settings.ingestion_service_url}/ingest"
     logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
