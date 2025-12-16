@@ -146,3 +146,29 @@ async def ingest_proxy_root(request: Request):
     target_url = f"{settings.ingestion_service_url}/ingest"
     logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)
+
+
+# Grafana routes - JWT validation required, forwards X-User-* headers
+@app.api_route(
+    "/api/grafana/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def grafana_proxy(request: Request, path: str):
+    """Proxy requests to Grafana with JWT validation and X-User headers."""
+    token_payload = await validate_jwt(request)
+    target_url = f"{settings.grafana_service_url}/{path}"
+    logger.debug("Proxying grafana request to: %s (user: %s)", target_url, token_payload.sub)
+    return await proxy_request(request, target_url, token_payload)
+
+
+# Root grafana endpoint (for /api/grafana without trailing path)
+@app.api_route(
+    "/api/grafana",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def grafana_proxy_root(request: Request):
+    """Proxy requests to Grafana root with JWT validation."""
+    token_payload = await validate_jwt(request)
+    target_url = settings.grafana_service_url
+    logger.debug("Proxying grafana request to: %s (user: %s)", target_url, token_payload.sub)
+    return await proxy_request(request, target_url, token_payload)
