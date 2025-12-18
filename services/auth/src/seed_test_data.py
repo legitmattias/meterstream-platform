@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 # Customer IDs from data/test_data_small.csv
 # 20 customers total, some with multiple users to simulate realistic scenarios
 TEST_USERS = [
+    # Integration/load testing user (shared by all load test instances)
+    {"email": "integration-test@example.com", "name": "Integration Test", "role": "internal", "customer_id": None},
+
     # Internal staff user (no customer_id)
     {"email": "staff@example.com", "name": "Test Staff", "role": "internal", "customer_id": None},
 

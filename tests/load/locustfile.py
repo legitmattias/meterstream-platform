@@ -26,6 +26,11 @@ from datetime import datetime, timedelta
 from locust import HttpUser, task, between, events
 
 
+# Shared credentials for seeded test user (password from TEST_USER_PASSWORD env var)
+SHARED_TEST_EMAIL = "integration-test@example.com"
+SHARED_TEST_PASSWORD = "testpassword123"
+
+
 class MeterStreamUser(HttpUser):
     """Simulates a user sending meter readings to the system."""
 
@@ -34,44 +39,19 @@ class MeterStreamUser(HttpUser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.token = None
-        self.user_email = f"loadtest-{random.randint(1000, 9999)}@example.com"
-        self.user_password = "loadtest-password-123"
 
     def on_start(self):
-        """Register and login to get JWT token."""
-        # Try to register (may already exist)
-        self.client.post(
-            "/api/auth/register",
-            json={
-                "email": self.user_email,
-                "password": self.user_password,
-                "name": "Load Test User",
-            },
-        )
-
-        # Login to get token
+        """Login with shared test user to get JWT token."""
         response = self.client.post(
             "/api/auth/login",
             json={
-                "email": self.user_email,
-                "password": self.user_password,
+                "email": SHARED_TEST_EMAIL,
+                "password": SHARED_TEST_PASSWORD,
             },
         )
 
         if response.status_code == 200:
-            data = response.json()
-            self.token = data.get("access_token")
-        else:
-            # Fall back to shared test user
-            response = self.client.post(
-                "/api/auth/login",
-                json={
-                    "email": "integration-test@example.com",
-                    "password": "integration-test-password-123",
-                },
-            )
-            if response.status_code == 200:
-                self.token = response.json().get("access_token")
+            self.token = response.json().get("access_token")
 
     @task(10)
     def ingest_single_reading(self):
@@ -151,8 +131,8 @@ class HighVolumeUser(HttpUser):
         response = self.client.post(
             "/api/auth/login",
             json={
-                "email": "integration-test@example.com",
-                "password": "integration-test-password-123",
+                "email": SHARED_TEST_EMAIL,
+                "password": SHARED_TEST_PASSWORD,
             },
         )
         if response.status_code == 200:
