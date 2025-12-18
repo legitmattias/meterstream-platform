@@ -103,6 +103,10 @@ spec:
                 secretKeyRef:
                   name: admin-bootstrap
                   key: password
+
+            # Test data seeding (staging only - overridden in pipeline)
+            - name: SEED_TEST_DATA
+              value: "false"
           resources:
             requests:
               memory: "128Mi"
