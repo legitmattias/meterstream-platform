@@ -163,3 +163,18 @@ Create endpoint: GET /api/analytics/summary returning {totalConsumption, costEst
 Fetch and display real values
 Pull from InfluxDB aggregations (sum, average queries)
 Update currency conversion if needed (SEK rate)
+
+# ADMIN DASHBOARD
+- system overview (GRAFANA)
+
+# INTERNAL DASHBOARD
+- Consumer Analytics (GRAFANA)
+
+# LANDING PAGE
+- Same for all
+- link to grafana for internal och admin
+
+# USER SETTINGS PAGE (optional)
+
+# MINA SIDOR DASHBOARD
+- Individual data consumption

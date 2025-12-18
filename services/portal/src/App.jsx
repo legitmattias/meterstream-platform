@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
+import { Landing } from './pages/Landing'
 // import { ProtectedRoute } from './components/ProtectedRoute'
 import './App.css'
 
@@ -16,16 +17,12 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-   {/*      <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        /> */}
-        <Route path="/dashboard" element={<Dashboard />} />
+        {/* Authenticated landing */}
+        <Route path="/dashboard" element={<Landing />} />
+        {/* Legacy analytics page (if needed) */}
+        <Route path="/analytics" element={<Dashboard />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   )
