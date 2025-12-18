@@ -291,6 +291,9 @@ deploy-auth-staging:
     - kubectl apply -f k8s/auth/service.yaml -n meterstream
     - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
 
+    # Enable test data seeding for staging
+    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
+
     # Update deployment to use newly built image
     - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
 
