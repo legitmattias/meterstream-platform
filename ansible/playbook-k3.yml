@@ -209,3 +209,88 @@
     - name: Show node join summary
       debug:
         msg: "Node {{ inventory_hostname }} joined to k3s server"
+  
+- name: Configure Traefik and NGINX
+  hosts: k3s_server
+  become: yes
+  tags: 
+    - traefik
+    - nginx
+  tasks:
+    # ============================================
+    # Traefik Configuration (persistent via K3s)
+    # ============================================
+    - name: Configure Traefik via HelmChartConfig
+      copy:
+        dest: /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+        content: |
+          apiVersion: helm.cattle.io/v1
+          kind: HelmChartConfig
+          metadata:
+            name: traefik
+            namespace: kube-system
+          spec:
+            valuesContent: |-
+              hostNetwork: false
+              service:
+                type: NodePort
+              ports:
+                web:
+                  nodePort: 30080
+                websecure:
+                  nodePort: 30443
+      notify: Wait for Traefik restart
+
+    # ============================================
+    # NGINX Reverse Proxy
+    # ============================================
+    - name: Install NGINX
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Remove default NGINX site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Create Traefik reverse proxy config
+      copy:
+        dest: /etc/nginx/sites-available/traefik-proxy
+        content: |
+          server {
+              listen 80;
+              server_name _;
+
+              location / {
+                  proxy_pass http://127.0.0.1:30080;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+
+                  # WebSocket support
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+              }
+          }
+      notify: Reload NGINX
+
+    - name: Enable Traefik reverse proxy
+      file:
+        src: /etc/nginx/sites-available/traefik-proxy
+        dest: /etc/nginx/sites-enabled/traefik-proxy
+        state: link
+      notify: Reload NGINX
+
+  handlers:
+    - name: Wait for Traefik restart
+      pause:
+        seconds: 30
+      
+    - name: Reload NGINX
+      systemd:
+        name: nginx
+        state: reloaded

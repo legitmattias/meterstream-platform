@@ -10,7 +10,15 @@ spec:
   rules:
     - http:
         paths:
-          # Frontend - serves static HTML with HTTP 200
+          # API Gateway
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8000
+          # Frontend
           - path: /
             pathType: Prefix
             backend:
@@ -18,25 +26,4 @@ spec:
                 name: frontend
                 port:
                   number: 80
-          # grafana
-          - path: /grafana
-            pathType: Prefix
-            backend:
-              service:
-                name: grafana
-                port:
-                  number: 3000
-
-      # TODO Week 3: Expose API Gateway for frontend login/API calls
-      # Uncomment when:
-      # 1. Gateway service is deployed and tested
-      # 2. Frontend needs to make API calls to /api/auth/login etc.
-      # 3. HTTPS is enabled (required for secure authentication)
-      # Then uncomment lines below:
-      # - path: /api
-      #   pathType: Prefix
-      #   backend:
-      #     service:
-      #       name: gateway
-      #       port:
-      #         number: 8000
+         
