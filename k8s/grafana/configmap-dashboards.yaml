@@ -4,7 +4,7 @@ kind: ConfigMap
 metadata:
   name: grafana-dashboards
 data:
-  aggregate-consumption.json: |
+  aggregate-consumption.json: |-
     {
       "annotations": {
         "list": [
@@ -67,24 +67,14 @@ data:
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
+                  { "color": "green" },
+                  { "color": "red", "value": 80 }
                 ]
               }
             },
             "overrides": []
           },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 0
-          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
           "id": 1,
           "options": {
             "barRadius": 0.05,
@@ -93,10 +83,7 @@ data:
             "fullHighlight": false,
             "groupWidth": 0.7,
             "legend": {
-              "calcs": [
-                "min",
-                "max"
-              ],
+              "calcs": [ "min", "max" ],
               "displayMode": "list",
               "placement": "bottom",
               "showLegend": false
@@ -105,21 +92,15 @@ data:
             "showValue": "always",
             "stacking": "none",
             "text": {},
-            "tooltip": {
-              "mode": "single",
-              "sort": "desc"
-            },
+            "tooltip": { "mode": "single", "sort": "desc" },
             "xField": "Time",
             "xTickLabelRotation": 0,
             "xTickLabelSpacing": 100
           },
           "targets": [
             {
-              "datasource": {
-                "type": "influxdb",
-                "uid": "influxdb"
-              },
-              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> group()\r\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\r\n",
+              "datasource": { "type": "influxdb", "uid": "influxdb" },
+              "query": "from(bucket: \"meterstream\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\n  |> filter(fn: (r) => r._field == \"power_consumption\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n",
               "refId": "A"
             }
           ],
@@ -129,9 +110,7 @@ data:
       ],
       "schemaVersion": 39,
       "tags": [],
-      "templating": {
-        "list": []
-      },
+      "templating": { "list": [] },
       "time": {
         "from": "2019-12-31T23:00:00.000Z",
         "to": "2020-01-08T11:00:00.000Z"
@@ -143,12 +122,3 @@ data:
       "version": 2,
       "weekStart": ""
     }
-
-  # monthly-consumption.json: |
-    
-
-  # raw-vs-processed.json: |
-    
-
-  # hourly-trends.json: |
-    
