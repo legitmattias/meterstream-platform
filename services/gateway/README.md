@@ -52,6 +52,7 @@ Note: `JWT_SECRET` environment variable is required even for tests.
 |------|------|---------|
 | `/api/auth/*` | No | Auth Service |
 | `/api/ingest` | JWT required | Ingestion Service |
+| `/api/grafana/*` | JWT required | Grafana |
 | `/health` | No | Gateway health |
 
 ### Headers Added (authenticated routes)
@@ -68,6 +69,7 @@ Environment variables:
 - `JWT_ALGORITHM` - Default: HS256
 - `AUTH_SERVICE_URL` - Default: http://auth:8000
 - `INGESTION_SERVICE_URL` - Default: http://ingestion:8000
+- `GRAFANA_SERVICE_URL` - Default: http://grafana:3000
 - `LOG_LEVEL` - Default: INFO
 
 ## Docker

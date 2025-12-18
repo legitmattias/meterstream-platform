@@ -103,6 +103,59 @@ class TestIngestProxy:
         assert response.status_code == 502
 
 
+class TestGrafanaProxy:
+    """Tests for Grafana proxy (JWT required)."""
+
+    def test_missing_token_returns_401(self, client):
+        """Test that request without token returns 401."""
+        response = client.get("/api/grafana/")
+
+        assert response.status_code == 401
+
+    def test_invalid_token_returns_401(self, client):
+        """Test that malformed token returns 401."""
+        response = client.get(
+            "/api/grafana/",
+            headers={"Authorization": "Bearer invalid-token"},
+        )
+
+        assert response.status_code == 401
+
+    def test_valid_token_allows_proxy(self, client):
+        """Test that valid token passes auth and attempts to proxy."""
+        exp = int(time.time()) + 3600
+        token = create_test_token({
+            "sub": "user-123",
+            "role": "customer",
+            "exp": exp,
+        })
+
+        response = client.get(
+            "/api/grafana/",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 502 means auth passed and gateway tried to reach Grafana
+        assert response.status_code == 502
+
+    def test_valid_token_with_path(self, client):
+        """Test that Grafana subpaths work with valid token."""
+        exp = int(time.time()) + 3600
+        token = create_test_token({
+            "sub": "user-123",
+            "role": "admin",
+            "exp": exp,
+        })
+
+        response = client.get(
+            "/api/grafana/d/dashboard-id/my-dashboard",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 502 means auth passed and gateway tried to reach Grafana
+        assert response.status_code == 502
+
+
 class TestHeaderSecurity:
     """Tests for header security (preventing header injection attacks)."""
 
