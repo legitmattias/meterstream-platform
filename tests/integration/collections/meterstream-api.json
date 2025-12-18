@@ -20,6 +20,10 @@
     {
       "key": "user_id",
       "value": ""
+    },
+    {
+      "key": "admin_token",
+      "value": ""
     }
   ],
   "item": [
@@ -400,6 +404,73 @@
                 "exec": [
                   "pm.test('Returns 401 without auth', function () {",
                   "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "item": [
+        {
+          "name": "Login as admin",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Admin login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Store admin token', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('admin_token', jsonData.access_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete test user",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/auth/users/{{user_id}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Accept 204 (deleted) or 404 (already deleted/never created)",
+                  "pm.test('Test user cleanup', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([204, 404]);",
                   "});"
                 ],
                 "type": "text/javascript"

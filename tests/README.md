@@ -29,19 +29,22 @@ npm install -g newman
 ### Running Tests
 
 ```bash
-# Run against staging
+# Run against staging (with admin password for cleanup)
 newman run tests/integration/collections/meterstream-api.json \
-  --environment tests/integration/environments/staging.json
+  --environment tests/integration/environments/staging.json \
+  --env-var "admin_password=YOUR_ADMIN_PASSWORD"
 
 # With detailed output
 newman run tests/integration/collections/meterstream-api.json \
   --environment tests/integration/environments/staging.json \
+  --env-var "admin_password=YOUR_ADMIN_PASSWORD" \
   --reporters cli,json \
   --reporter-json-export results.json
 
 # Custom base URL
 newman run tests/integration/collections/meterstream-api.json \
-  --env-var "base_url=http://localhost:8080"
+  --env-var "base_url=http://localhost:8080" \
+  --env-var "admin_password=YOUR_ADMIN_PASSWORD"
 ```
 
 ### Test Scenarios
@@ -52,12 +55,15 @@ newman run tests/integration/collections/meterstream-api.json \
 | Auth Flow | Register, login, get user, refresh token |
 | Auth Error Cases | Wrong password, missing/invalid token |
 | Ingestion | Single reading, batch, without auth |
+| Cleanup | Delete test user (requires admin) |
 
 ### Environment Variables
 
 - `base_url` - API base URL (e.g., `http://staging.meterstream.example`)
 - `test_email` - Test user email
 - `test_password` - Test user password
+- `admin_email` - Admin user email (for cleanup)
+- `admin_password` - Admin password (**pass via CLI, not stored in file**)
 - `access_token` - Set automatically after login
 - `refresh_token` - Set automatically after login
 
@@ -134,6 +140,7 @@ integration-test:
   script:
     - newman run tests/integration/collections/meterstream-api.json
       --environment tests/integration/environments/staging.json
+      --env-var "admin_password=$BOOTSTRAP_ADMIN_PASSWORD"
       --reporters cli,junit
       --reporter-junit-export results.xml
   artifacts:

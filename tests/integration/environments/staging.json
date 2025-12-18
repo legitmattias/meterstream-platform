@@ -19,6 +19,18 @@
       "value": "integration-test-password-123",
       "type": "secret",
       "enabled": true
+    },
+    {
+      "key": "admin_email",
+      "value": "admin@meterstream.local",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "admin_password",
+      "value": "",
+      "type": "secret",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"
