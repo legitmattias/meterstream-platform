@@ -40,6 +40,28 @@ spec:
                   name: influxdb-init
                   key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
 
+            # Auth Proxy - trust X-User-* headers from Gateway
+            - name: GF_AUTH_PROXY_ENABLED
+              value: "true"
+            - name: GF_AUTH_PROXY_HEADER_NAME
+              value: "X-User-ID"
+            - name: GF_AUTH_PROXY_HEADER_PROPERTY
+              value: "username"
+            - name: GF_AUTH_PROXY_AUTO_SIGN_UP
+              value: "true"
+
+            # Disable default login form (optional but recommended)
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+
+            # Disable anonymous access
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+            - name: GF_AUTH_PROXY_HEADERS
+              value: "Role:X-User-Role"
+
+
+
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
