@@ -10,6 +10,7 @@ FastAPI service for user authentication with JWT tokens and MongoDB storage.
 | POST | `/auth/login` | Login, returns access + refresh tokens |
 | POST | `/auth/refresh` | Get new access token using refresh token |
 | GET | `/auth/me` | Get current user info (requires auth header) |
+| DELETE | `/auth/users/{user_id}` | Delete user (admin only) |
 | GET | `/health` | Liveness probe |
 | GET | `/ready` | Readiness probe (checks MongoDB) |
 
