@@ -5,14 +5,150 @@ metadata:
   name: grafana-dashboards
 data:
   aggregate-consumption.json: |
-    #PLACEHOLDER:
-    {}
-  monthly-consumption.json: |
-    #PLACEHOLDER: 
-    {}
-  raw-vs-processed.json: |
-    #PLACEHOLDER: 
-    {}
-  hourly-trends.json: |
-    #PLACEHOLDER:
-    {}
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {
+            "default": false,
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "light-blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisGridShow": true,
+                "axisLabel": "",
+                "axisPlacement": "left",
+                "axisWidth": 30,
+                "fillOpacity": 100,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineWidth": 1,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "barRadius": 0.05,
+            "barWidth": 0.9,
+            "colorByField": "Value",
+            "fullHighlight": false,
+            "groupWidth": 0.7,
+            "legend": {
+              "calcs": [
+                "min",
+                "max"
+              ],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "orientation": "auto",
+            "showValue": "always",
+            "stacking": "none",
+            "text": {},
+            "tooltip": {
+              "mode": "single",
+              "sort": "desc"
+            },
+            "xField": "Time",
+            "xTickLabelRotation": 0,
+            "xTickLabelSpacing": 100
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influxdb"
+              },
+              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> group()\r\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\r\n",
+              "refId": "A"
+            }
+          ],
+          "title": "Aggregate Energy Consumption",
+          "type": "barchart"
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": [],
+      "templating": {
+        "list": []
+      },
+      "time": {
+        "from": "2019-12-31T23:00:00.000Z",
+        "to": "2020-01-08T11:00:00.000Z"
+      },
+      "timepicker": {},
+      "timezone": "Europe/Stockholm",
+      "title": "Aggregate - A3",
+      "uid": "af7e17ar78etcd",
+      "version": 2,
+      "weekStart": ""
+    }
+
+  # monthly-consumption.json: |
+    
+
+  # raw-vs-processed.json: |
+    
+
+  # hourly-trends.json: |
+    
