@@ -12,6 +12,7 @@ data:
         folder: MeterStream
         type: file
         disableDeletion: true
-        editable: false
+        editable: true
+        allowUiUpdates: true
         options:
           path: /var/lib/grafana/dashboards
