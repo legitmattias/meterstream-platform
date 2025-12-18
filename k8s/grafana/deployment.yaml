@@ -25,6 +25,11 @@ spec:
             #  value: xxxxxx
             #- name: GF_SECURITY_ADMIN_PASSWORD
             #  value: xxxxxx
+            - name: GF_USERS_DEFAULT_THEME
+              value: light
+
+            - name: GF_DEFAULT_LANGUAGE
+              value: sv-SE
 
             - name: GF_SECURITY_ALLOW_EMBEDDING
               value: "true"
