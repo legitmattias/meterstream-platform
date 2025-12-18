@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from .config import get_settings
 from .mongodb import mongodb
 from .bootstrap import ensure_admin_exists
+from .seed_test_data import seed_test_data_if_enabled
 from .auth_router import router as auth_router
 from .models import HealthResponse
 
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting auth service")
     await mongodb.connect()
     await ensure_admin_exists()
+    await seed_test_data_if_enabled()
     yield
     logger.info("Shutting down auth service")
     await mongodb.disconnect()
