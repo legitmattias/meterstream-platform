@@ -22,7 +22,7 @@ Load profiles:
 
 import json
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from locust import HttpUser, task, between, events
 
 
@@ -60,12 +60,12 @@ class MeterStreamUser(HttpUser):
             return
 
         headers = {"Authorization": f"Bearer {self.token}"}
-        timestamp = datetime.utcnow() - timedelta(minutes=random.randint(0, 60))
+        timestamp = datetime.now(UTC) - timedelta(minutes=random.randint(0, 60))
 
         data = {
             "readings": [
                 {
-                    "DateTime": timestamp.isoformat() + "Z",
+                    "DateTime": timestamp.isoformat().replace("+00:00", "Z"),
                     "CUSTOMER": f"LOAD_TEST_{random.randint(1, 100):03d}",
                     "AREA": f"area-{random.randint(1, 5)}",
                     "Power_Consumption": round(random.uniform(50.0, 500.0), 2),
@@ -82,14 +82,14 @@ class MeterStreamUser(HttpUser):
             return
 
         headers = {"Authorization": f"Bearer {self.token}"}
-        base_time = datetime.utcnow() - timedelta(hours=random.randint(1, 24))
+        base_time = datetime.now(UTC) - timedelta(hours=random.randint(1, 24))
 
         readings = []
         for i in range(random.randint(5, 20)):
             timestamp = base_time + timedelta(minutes=i * 15)
             readings.append(
                 {
-                    "DateTime": timestamp.isoformat() + "Z",
+                    "DateTime": timestamp.isoformat().replace("+00:00", "Z"),
                     "CUSTOMER": f"LOAD_TEST_{random.randint(1, 100):03d}",
                     "AREA": f"area-{random.randint(1, 5)}",
                     "Power_Consumption": round(random.uniform(50.0, 500.0), 2),
@@ -145,14 +145,14 @@ class HighVolumeUser(HttpUser):
             return
 
         headers = {"Authorization": f"Bearer {self.token}"}
-        base_time = datetime.utcnow() - timedelta(days=random.randint(1, 30))
+        base_time = datetime.now(UTC) - timedelta(days=random.randint(1, 30))
 
         readings = []
         for i in range(50):  # 50 readings per request
             timestamp = base_time + timedelta(hours=i)
             readings.append(
                 {
-                    "DateTime": timestamp.isoformat() + "Z",
+                    "DateTime": timestamp.isoformat().replace("+00:00", "Z"),
                     "CUSTOMER": f"STRESS_TEST_{random.randint(1, 200):03d}",
                     "AREA": f"area-{random.randint(1, 10)}",
                     "Power_Consumption": round(random.uniform(10.0, 1000.0), 2),
