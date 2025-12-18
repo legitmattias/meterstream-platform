@@ -10,6 +10,27 @@ class ConsumptionDataPoint(BaseModel):
     consumption: float
 
 
+class WeeklyDayData(BaseModel):
+    """Weekly per-day data point."""
+
+    day: str  # Mon, Tue, Wed, etc.
+    consumption: float
+
+
+class MonthlyDayData(BaseModel):
+    """Monthly per-day data point."""
+
+    day: int  # 1-31
+    consumption: float
+
+
+class HourlyData(BaseModel):
+    """Hourly data point."""
+
+    hour: int  # 0-23
+    consumption: float
+
+
 class ConsumptionResponse(BaseModel):
     """Consumption query response."""
 
@@ -31,9 +52,14 @@ class DashboardResponse(BaseModel):
     """Complete dashboard data response."""
 
     customer_id: str
-    period: str
-    consumption: list[ConsumptionDataPoint]
-    summary: SummaryResponse
+    year: str | None  # "2024", "2025", or "All"
+    month: int | None  # 1-12 if monthly view requested
+    date: str | None  # YYYY-MM-DD if hourly view requested
+    weekly_days: list[WeeklyDayData]
+    monthly_days: list[MonthlyDayData]
+    hourly: list[HourlyData]
+    total: float
+    average: float
 
 
 class HealthResponse(BaseModel):

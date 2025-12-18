@@ -6,8 +6,25 @@ from typing import Annotated
 from fastapi import FastAPI, Header, HTTPException, Query
 
 from .config import settings
-from .influx import get_influx_client, query_consumption, query_summary
-from .models import ConsumptionDataPoint, ConsumptionResponse, DashboardResponse, HealthResponse, SummaryResponse
+from .influx import (
+    get_influx_client,
+    query_consumption,
+    query_hourly,
+    query_monthly_days,
+    query_summary,
+    query_total_and_average,
+    query_weekly_days,
+)
+from .models import (
+    ConsumptionDataPoint,
+    ConsumptionResponse,
+    DashboardResponse,
+    HealthResponse,
+    HourlyData,
+    MonthlyDayData,
+    SummaryResponse,
+    WeeklyDayData,
+)
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -110,17 +127,21 @@ async def get_summary(
 @app.get("/api/data/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
     x_customer_id: Annotated[str, Header()] = None,
-    period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
+    year: str | None = Query(None),
+    month: int | None = Query(None, ge=1, le=12),
+    date: str | None = Query(None),
 ):
     """
-    Get all dashboard data at once (consumption + summary).
+    Get all dashboard data at once.
 
     Args:
         x_customer_id: Customer ID (from gateway header)
-        period: "daily" (24 days), "weekly" (4 weeks), or "monthly" (12 months)
+        year: Optional year filter ("2024", "2025", "All")
+        month: Optional month (1-12) for monthly view
+        date: Optional date (YYYY-MM-DD) for hourly view
 
     Returns:
-        Combined consumption data and summary statistics
+        Combined weekly, monthly, hourly data and summary statistics
     """
     customer_id = get_customer_id(x_customer_id)
 
@@ -128,26 +149,35 @@ async def get_dashboard(
         client = get_influx_client()
         query_api = client.query_api()
 
-        # Query both at once
-        consumption_data = query_consumption(query_api, customer_id, period)
-        summary_stats = query_summary(query_api, customer_id, period)
+        # Query weekly per-day data
+        weekly_data = query_weekly_days(query_api, customer_id, year)
+        weekly_days = [WeeklyDayData(day=d["day"], consumption=d["consumption"]) for d in weekly_data]
 
-        consumption_points = [
-            ConsumptionDataPoint(timestamp=d["timestamp"], consumption=d["consumption"])
-            for d in consumption_data
-        ]
+        # Query monthly per-day data if month provided
+        monthly_days = []
+        if month and year and year != "All":
+            monthly_data = query_monthly_days(query_api, customer_id, int(year), month)
+            monthly_days = [MonthlyDayData(day=d["day"], consumption=d["consumption"]) for d in monthly_data]
 
-        summary = SummaryResponse(
-            customer_id=customer_id,
-            period=period,
-            **summary_stats,
-        )
+        # Query hourly data if date provided
+        hourly = []
+        if date:
+            hourly_data = query_hourly(query_api, customer_id, date)
+            hourly = [HourlyData(hour=h["hour"], consumption=h["consumption"]) for h in hourly_data]
+
+        # Query total and average
+        stats = query_total_and_average(query_api, customer_id, year)
 
         return DashboardResponse(
             customer_id=customer_id,
-            period=period,
-            consumption=consumption_points,
-            summary=summary,
+            year=year,
+            month=month,
+            date=date,
+            weekly_days=weekly_days,
+            monthly_days=monthly_days,
+            hourly=hourly,
+            total=stats["total"],
+            average=stats["average"],
         )
 
     except Exception as e:
