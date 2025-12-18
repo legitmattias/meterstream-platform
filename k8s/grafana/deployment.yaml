@@ -42,7 +42,7 @@ spec:
 
             # Auth Proxy - trust X-User-* headers from Gateway
             - name: GF_AUTH_PROXY_ENABLED
-              value: "true"
+              value: "false" #ska vara true
             - name: GF_AUTH_PROXY_HEADER_NAME
               value: "X-User-ID"
             - name: GF_AUTH_PROXY_HEADER_PROPERTY
@@ -52,7 +52,7 @@ spec:
 
             # Disable default login form (optional but recommended)
             - name: GF_AUTH_DISABLE_LOGIN_FORM
-              value: "true"
+              value: "false" # ska vara true
 
             # Disable anonymous access
             - name: GF_AUTH_ANONYMOUS_ENABLED
