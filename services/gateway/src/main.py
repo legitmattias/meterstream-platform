@@ -117,7 +117,7 @@ async def proxy_request(
 )
 async def auth_proxy(request: Request, path: str):
     """Proxy requests to Auth Service without JWT validation."""
-    target_url = f"{settings.auth_service_url}/{path}"
+    target_url = f"{settings.auth_service_url}/auth/{path}"
     logger.debug("Proxying auth request to: %s", target_url)
     return await proxy_request(request, target_url)
 
