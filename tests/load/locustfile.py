@@ -65,7 +65,7 @@ class MeterStreamUser(HttpUser):
         data = {
             "readings": [
                 {
-                    "DateTime": timestamp.isoformat() + "Z",
+                    "DateTime": timestamp.isoformat().replace("+00:00", "Z"),
                     "CUSTOMER": f"LOAD_TEST_{random.randint(1, 100):03d}",
                     "AREA": f"area-{random.randint(1, 5)}",
                     "Power_Consumption": round(random.uniform(50.0, 500.0), 2),
@@ -89,7 +89,7 @@ class MeterStreamUser(HttpUser):
             timestamp = base_time + timedelta(minutes=i * 15)
             readings.append(
                 {
-                    "DateTime": timestamp.isoformat() + "Z",
+                    "DateTime": timestamp.isoformat().replace("+00:00", "Z"),
                     "CUSTOMER": f"LOAD_TEST_{random.randint(1, 100):03d}",
                     "AREA": f"area-{random.randint(1, 5)}",
                     "Power_Consumption": round(random.uniform(50.0, 500.0), 2),
@@ -152,7 +152,7 @@ class HighVolumeUser(HttpUser):
             timestamp = base_time + timedelta(hours=i)
             readings.append(
                 {
-                    "DateTime": timestamp.isoformat() + "Z",
+                    "DateTime": timestamp.isoformat().replace("+00:00", "Z"),
                     "CUSTOMER": f"STRESS_TEST_{random.randint(1, 200):03d}",
                     "AREA": f"area-{random.randint(1, 10)}",
                     "Power_Consumption": round(random.uniform(10.0, 1000.0), 2),
