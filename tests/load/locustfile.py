@@ -34,7 +34,7 @@ class MeterStreamUser(HttpUser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.token = None
-        self.user_email = f"loadtest-{random.randint(1000, 9999)}@meterstream.local"
+        self.user_email = f"loadtest-{random.randint(1000, 9999)}@example.com"
         self.user_password = "loadtest-password-123"
 
     def on_start(self):
@@ -66,7 +66,7 @@ class MeterStreamUser(HttpUser):
             response = self.client.post(
                 "/api/auth/login",
                 json={
-                    "email": "integration-test@meterstream.local",
+                    "email": "integration-test@example.com",
                     "password": "integration-test-password-123",
                 },
             )
@@ -151,7 +151,7 @@ class HighVolumeUser(HttpUser):
         response = self.client.post(
             "/api/auth/login",
             json={
-                "email": "integration-test@meterstream.local",
+                "email": "integration-test@example.com",
                 "password": "integration-test-password-123",
             },
         )

@@ -10,7 +10,7 @@
     },
     {
       "key": "test_email",
-      "value": "integration-test@meterstream.local",
+      "value": "integration-test@example.com",
       "type": "default",
       "enabled": true
     },
@@ -22,7 +22,7 @@
     },
     {
       "key": "admin_email",
-      "value": "admin@meterstream.local",
+      "value": "admin@example.com",
       "type": "default",
       "enabled": true
     },
