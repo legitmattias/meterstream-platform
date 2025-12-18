@@ -1,0 +1,36 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: processor-scaler
+  namespace: meterstream
+spec:
+  scaleTargetRef:
+    name: processor  # Namnet på din deployment
+  minReplicaCount: 1   # Minst 1 pod alltid
+  maxReplicaCount: 10  # Max 10 pods under hög belastning
+  pollingInterval: 15  # Kollar var 15:e sekund
+  cooldownPeriod: 60   # Vänta 60s innan scale-down
+
+  # Snabbare scale-down för demo purposes
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60  # Bara 60s istället för 300s
+          policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 15
+
+  triggers:
+    # NATS JetStream consumer lag trigger
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: "nats.meterstream.svc.cluster.local:8222"
+        account: "$G"
+        stream: "METER_DATA"
+        consumer: "dataprocessor"
+        # Skala upp om det finns fler än 50 meddelanden som väntar
+        lagThreshold: "50"
+        # Aktivera TLS om du använder det (annars false)
+        useHttps: "false"
