@@ -2,62 +2,54 @@
 
 ## Översikt
 
-Pipelinen bygger container-images och deployar (automatiskt) till staging, med manuell godkännande för produktion.
+Pipelinen bygger container-images och deployar till staging och produktion.
 
 ```
-Push till main → Build images → Deploy Staging (manuell for now) → Deploy Production (manuell)
-```
-
----
-
-## Pipeline-Steg
-
-| Steg | Vad händer | Trigger |
-|------|------------|---------|
-| **Build** | Kaniko bygger Docker-images för alla services | Automatisk vid push till `main` |
-| **Deploy Staging** | Uppdaterar staging-klustret med nya images | Manuell (klicka i GitLab UI) |
-| **Deploy Production** | Uppdaterar produktions-klustret | Manuell (klicka i GitLab UI) |
-
----
-
-## Mappstruktur exempel
-
-```
-meterstream/
-├── .gitlab-ci.yml              # Pipeline-konfiguration
-├── services/
-│   ├── ingestion/
-│   │   └── Dockerfile          # Byggs som: <registry>/ingestion:tag
-│   ├── processor/
-│   │   └── Dockerfile          # Byggs som: <registry>/processor:tag
-│   └── auth/
-│       └── Dockerfile          # Byggs som: <registry>/auth:tag
-└── k8s/
-    └── deployments/            # Kubernetes manifests
+Push → Build images → Deploy Staging (manuell) → Deploy Production (git tags)
 ```
 
 ---
 
-## Container Registry
+## Pipeline Stages
 
-**Registry URL:** `gitlab.lnu.se:5050`
-
-**Image-sökväg:** `gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/<service-namn>`
+| Stage | Vad händer | Trigger |
+|-------|------------|---------|
+| **test-connection** | Verifierar kubectl-anslutning till kluster | Manuell |
+| **build** | Kaniko bygger Docker-images för alla services | Manuell (eller automatisk vid git tag) |
+| **deploy-staging** | Deployar till staging-klustret | Manuell |
+| **deploy-prod** | Deployar till produktion | Manuell (kräver git tag `v*.*.*`) |
 
 ---
 
-### Image Tags
+## Services
 
-Varje build skapar två taggar:
+Pipeline bygger och deployar följande services:
+
+| Service | Beskrivning | Dependencies |
+|---------|-------------|--------------|
+| **mongodb** | Databas för auth-service | - |
+| **nats** | Message queue för event streaming | - |
+| **influxdb** | Tidsseriedatabas för mätdata | - |
+| **auth** | JWT authentication service | MongoDB |
+| **ingestion** | Tar emot mätdata via API | NATS |
+| **processor** | Processar mätdata från NATS till InfluxDB | NATS, InfluxDB |
+| **gateway** | API gateway och routing | Auth, Ingestion |
+| **frontend** | Statisk webbapp (nginx) | - |
+| **grafana** | Visualisering av mätdata | InfluxDB |
+
+---
+
+## Image Tags
+
+Varje build skapar följande taggar:
 
 | Tag | Exempel | Användning |
 |-----|---------|------------|
-| Commit SHA | `ingestion:a1b2c3d` | Unik per commit, används vid deploy |
+| Commit SHA | `ingestion:a1b2c3d` | Specifik commit |
 | Latest | `ingestion:latest` | Senaste versionen |
+| Version (vid git tag) | `ingestion:v1.0.0` | Release-version |
 
-### Visa images i Registry
-
-GitLab → **Deploy** → **Container Registry**
+**Registry URL:** `gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream`
 
 ---
 
@@ -65,78 +57,118 @@ GitLab → **Deploy** → **Container Registry**
 
 Konfigureras i: **Settings → CI/CD → Variables**
 
+### Kubernetes
+
 | Variabel | Beskrivning | Typ |
 |----------|-------------|-----|
 | `KUBE_CONFIG_STAGING_B64` | Kubeconfig för staging (base64) | Masked, Protected |
 | `KUBE_CONFIG_PROD_B64` | Kubeconfig för produktion (base64) | Masked, Protected |
 
+### Docker Registry
+
+| Variabel | Beskrivning |
+|----------|-------------|
+| `DOCKERHUB_USERNAME` | Docker Hub användarnamn (för base images) |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+
+### MongoDB
+
+| Variabel | Miljö | Beskrivning |
+|----------|-------|-------------|
+| `MONGODB_USERNAME` | Båda | MongoDB användarnamn |
+| `MONGODB_PASSWORD_STAGING` | Staging | MongoDB lösenord |
+| `MONGODB_PASSWORD_PROD` | Production | MongoDB lösenord |
+
+### InfluxDB
+
+| Variabel | Miljö | Beskrivning |
+|----------|-------|-------------|
+| `STAG_INFLUXDB_INIT_MODE` | Staging | Init mode (setup) |
+| `STAG_INFLUXDB_INIT_USERNAME` | Staging | Admin username |
+| `STAG_INFLUXDB_INIT_PASSWORD` | Staging | Admin password |
+| `STAG_INFLUXDB_INIT_ORG` | Staging | Organization |
+| `STAG_INFLUXDB_INIT_BUCKET` | Staging | Bucket name |
+| `STAG_INFLUXDB_INIT_ADMIN_TOKEN` | Staging | Admin token |
+| `STAG_INFLUXDB_INIT_RETENTION` | Staging | Data retention |
+| `PROD_INFLUXDB_INIT_*` | Production | Samma som ovan för prod |
+
+### Auth Service
+
+| Variabel | Miljö | Beskrivning |
+|----------|-------|-------------|
+| `JWT_SECRET_STAGING` | Staging | JWT signing secret |
+| `JWT_SECRET_PROD` | Production | JWT signing secret |
+| `STAG_BOOTSTRAP_ADMIN_PASSWORD` | Staging | Initial admin password |
+| `PROD_BOOTSTRAP_ADMIN_PASSWORD` | Production | Initial admin password |
+| `TEST_USER_PASSWORD` | Production | Lösenord för test-användare i production (staging använder default: `testpassword123`) |
+
 ---
 
+## Deploy-ordning
 
-## development-strategi (Feature Branch)
+Services måste deployas i rätt ordning på grund av dependencies:
 
-Just nu kör vi all kod via en `development`-branch först för att verifiera 
-att allt fungerar innan vi mergar till `main`.
+### Staging
 
-### Så här gör du:
+1. **Infrastruktur** (körs först):
+   ```
+   deploy-mongodb-staging
+   deploy-nats-staging
+   deploy-influx-staging
+   ```
 
-1. Ändra branch-villkor i `.gitlab-ci.yml` (main → development)
-2. Ta bort Protected från CI/CD-variabler (behåll Masked!)
-3. Pusha till development-branch
-4. När allt fungerar: Ändra tillbaka till main
+2. **Services** (när infrastruktur är redo):
+   ```
+   deploy-auth-staging        (depends: mongodb)
+   deploy-ingestion-staging   (depends: nats)
+   deploy-processor-staging   (depends: nats, influxdb)
+   deploy-grafana-staging     (depends: influxdb)
+   ```
 
+3. **Gateway & Frontend**:
+   ```
+   deploy-gateway-staging     (depends: auth, ingestion)
+   deploy-frontend-staging
+   deploy-ingress-staging
+   ```
+
+Pipeline verifierar automatiskt att dependencies är klara innan deploy.
+
+### Production
+
+Samma ordning som staging, men jobben triggas endast när du skapar en git tag (`v*.*.*`).
 
 ---
 
-### Uppdatera kubeconfig
+## Workflow
 
-Om klustret återskapas behöver kubeconfig uppdateras:
+### 1. Normal deployment (staging)
 
 ```bash
-# På servern
-cat kubeconfig-external.yaml | base64 -w0
-
-# Kopiera output → klistra in i GitLab CI/CD Variables
+# 1. Gör ändringar i koden
+# 2. Push till Git
+# 3. Gå till GitLab → CI/CD → Pipelines
+# 4. Kör build-jobb manuellt (t.ex. build-ingestion)
+# 5. Kör deploy-jobb manuellt (t.ex. deploy-ingestion-staging)
 ```
 
----
+### 2. Production deployment (via git tag)
 
-## Lägga till en ny Service
+```bash
+# 1. Testa att allt fungerar i staging
+# 2. Skapa git tag:
+git tag -a v1.0.0 -m "Release 1.0.0"
+git push origin v1.0.0
 
-### 1. Skapa service-mapp
-
-```
-services/
-└── <ny-service>/
-    └── Dockerfile
-```
-
-### 2. Lägg till build-jobb i `.gitlab-ci.yml`
-
-```yaml
-build-<ny-service>:
-  extends: .build
-  variables:
-    SERVICE_NAME: <ny-service>
+# 3. Build-jobben körs automatiskt
+# 4. Kör deploy-prod-jobben manuellt i GitLab
 ```
 
-### 3. Lägg till i deploy-stegen
+### 3. Testa anslutning
 
-```yaml
-# I deploy-staging och deploy-production
-- kubectl -n meterstream set image deploy/<ny-service> <ny-service>="${IMAGE_BASE}/<ny-service>:${TAG}"
-- kubectl -n meterstream rollout status deploy/<ny-service> --timeout=120s
-```
-
-### 4. Uppdatera `needs` i deploy-staging
-
-```yaml
-deploy-staging:
-  needs:
-    - build-ingestion
-    - build-processor
-    - build-auth
-    - build-<ny-service>  # Lägg till
+```bash
+# Gå till GitLab → CI/CD → Pipelines
+# Kör: test-staging-connection (manuell)
 ```
 
 ---
@@ -145,23 +177,17 @@ deploy-staging:
 
 Kubernetes behöver credentials för att hämta images från GitLab Registry.
 
-### Steg 1: Skapa Deploy Token i GitLab
+### Skapa Deploy Token
 
-1. Gå till: **Settings → Repository → Deploy tokens**
-2. Fyll i:
-   - Name: `k8s-image-pull`
-   - Scopes: ☑️ `read_registry`
-3. Klicka "Create deploy token"
-4. **Kopiera username och token direkt!** (visas bara en gång)
+1. **Settings → Repository → Deploy tokens**
+2. Name: `k8s-image-pull`
+3. Scopes: ☑️ `read_registry`
+4. **Kopiera username och token!**
 
-### Steg 2: Skapa secret i båda klustren
+### Skapa Secret i Klustret
 
 **Staging:**
 ```bash
-export KUBECONFIG=~/.kube/meterstream-staging.yaml
-
-kubectl create namespace meterstream
-
 kubectl -n meterstream create secret docker-registry gitlab-registry \
   --docker-server=gitlab.lnu.se:5050 \
   --docker-username=<deploy-token-username> \
@@ -171,10 +197,8 @@ kubectl -n meterstream create secret docker-registry gitlab-registry \
 
 **Production:**
 ```bash
+# Samma kommando med production kubeconfig
 export KUBECONFIG=~/.kube/meterstream-prod.yaml
-
-kubectl create namespace meterstream
-
 kubectl -n meterstream create secret docker-registry gitlab-registry \
   --docker-server=gitlab.lnu.se:5050 \
   --docker-username=<deploy-token-username> \
@@ -182,57 +206,39 @@ kubectl -n meterstream create secret docker-registry gitlab-registry \
   --docker-email=meterstream@example.com
 ```
 
-### Steg 3: Verifiera
-
-```bash
-kubectl -n meterstream get secrets
-# Ska visa: gitlab-registry
-```
-
-### Steg 4: Referera i deployment.yaml
-
-```yaml
-spec:
-  template:
-    spec:
-      imagePullSecrets:
-        - name: gitlab-registry
-      containers:
-        - name: ingestion
-          image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/ingestion:latest
-          imagePullPolicy: Always
-```
-
 ---
 
 ## Felsökning
 
-### Pipeline misslyckas på build
+### Build misslyckas
 
-- Kontrollera att `Dockerfile` finns i rätt mapp
-- Kontrollera att Dockerfile-syntax är korrekt
+- Kontrollera att `Dockerfile` finns i `services/<service-name>/`
+- Kontrollera Dockerfile-syntax
+- Kolla build-loggar i GitLab
 
-### Pipeline misslyckas på deploy
+### Deploy misslyckas
 
-- Verifiera att kubeconfig är korrekt (testa med connection-test)
-- Kontrollera att deployment finns i klustret
-- Kontrollera att namespace `meterstream` existerar
-
-### "connection refused" eller "timeout"
-
-- Port 6443 måste vara öppen i OpenStack security groups
+**"connection refused":**
+- Verifiera kubeconfig med `test-staging-connection`
 - Kontrollera att K3s körs: `sudo systemctl status k3s`
+- Port 6443 måste vara öppen i OpenStack security groups
 
-### "image pull error" / ErrImagePull
+**"Required service X is not deployed":**
+- Deploya dependencies först (se Deploy-ordning ovan)
+- Pipeline visar vilken service som saknas
 
-- Kontrollera att `gitlab-registry` secret finns: `kubectl -n meterstream get secrets`
-- Kontrollera att image-sökvägen är korrekt (använd `gitlab.lnu.se:5050`)
-- Kontrollera att `imagePullSecrets` finns i deployment
-- Testa att logga in manuellt: `docker login gitlab.lnu.se:5050`
+**"image pull error" / ErrImagePull:**
+- Verifiera att `gitlab-registry` secret finns: `kubectl -n meterstream get secrets`
+- Kontrollera image-sökväg i deployment
+- Testa manuellt: `docker login gitlab.lnu.se:5050`
+
+**HPA fungerar inte:**
+- Kontrollera att KEDA är installerat: `kubectl get pods -n keda`
+- Se [k8s/processor/README.md](k8s/processor/README.md)
 
 ---
 
-## Vanliga kommandon
+## Vanliga Kommandon
 
 ```bash
 # Visa pods
@@ -241,12 +247,197 @@ kubectl -n meterstream get pods
 # Visa deployments
 kubectl -n meterstream get deployments
 
-# Visa loggar
-kubectl -n meterstream logs deploy/ingestion
+# Visa services
+kubectl -n meterstream get svc
 
-# Beskriv deployment (bra för felsökning)
-kubectl -n meterstream describe deploy/ingestion
+# Visa loggar
+kubectl -n meterstream logs deploy/ingestion -f
+
+# Beskriv pod (bra för felsökning)
+kubectl -n meterstream describe pod <pod-name>
 
 # Visa events (bra för image pull errors)
 kubectl -n meterstream get events --sort-by='.lastTimestamp'
+
+# Visa HPA status
+kubectl -n meterstream get hpa
+kubectl -n meterstream get scaledobject
+
+# Watch pods (se autoscaling i realtid)
+watch kubectl -n meterstream get pods
 ```
+
+---
+
+## Uppdatera Kubeconfig
+
+Om klustret återskapas:
+
+```bash
+# På servern
+cat kubeconfig-external.yaml | base64 -w0
+
+# Kopiera output → GitLab → Settings → CI/CD → Variables
+# Uppdatera KUBE_CONFIG_STAGING_B64 eller KUBE_CONFIG_PROD_B64
+```
+
+---
+
+## Kubectl Apply: Ordning av Kommandon
+
+### Spelar ordningen roll?
+
+När du deployar med kubectl spelar **ordningen av vissa kommandon roll**, men inte alla:
+
+#### ✅ Ordning spelar INTE roll för:
+
+```yaml
+# Dessa kan köras i valfri ordning
+- kubectl apply -f k8s/auth/          # Applicera manifests
+- kubectl set env deploy/auth VAR=val # Sätt env vars
+- kubectl set env deploy/auth VAR2=val2
+```
+
+**Varför?** Kubernetes batchar ändringar. När du gör flera `kubectl set env`, startar pods om bara EN gång med alla ändringar.
+
+#### ⚠️ Ordning spelar roll för:
+
+```yaml
+# RÄTT ordning:
+- kubectl apply -f k8s/auth/          # 1. Skapa deployment
+- kubectl set env deploy/auth VAR=val # 2. Sätt env vars
+- kubectl set image deploy/auth ...   # 3. Byt image (triggar rollout)
+- kubectl rollout status deploy/auth  # 4. Vänta på completion
+```
+
+**Varför?**
+- `kubectl set image` triggar en ny rollout
+- Du vill att alla env vars ska vara satta INNAN rollout startar
+- `kubectl rollout status` måste komma sist för att vänta på deploy
+
+#### 📦 Applicera hela mappar istället för enskilda filer:
+
+```yaml
+# ❌ Långsamt och repetitivt
+- kubectl apply -f k8s/auth/configmap.yaml
+- kubectl apply -f k8s/auth/service.yaml
+- kubectl apply -f k8s/auth/deployment.yaml
+
+# ✅ Bättre: applicera hela mappen
+- kubectl apply -f k8s/auth/
+```
+
+Kubectl applicerar automatiskt alla `.yaml` filer i mappen.
+
+---
+
+## Lägga till ett nytt Deploy-steg
+
+Exempel: Lägg till en ny service `analytics` som beror på InfluxDB.
+
+### 1. Skapa Build-jobb
+
+```yaml
+build-analytics:
+  extends: .build
+  needs:
+    - job: test-analytics
+      optional: true
+  variables:
+    SERVICE_NAME: analytics
+```
+
+### 2. Skapa Deploy-jobb för Staging
+
+```yaml
+deploy-analytics-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-analytics
+      optional: true
+  script:
+    # Verifiera att dependencies finns
+    - require_statefulset influxdb
+
+    # Applicera Kubernetes manifests
+    - kubectl apply -f k8s/analytics/ -n meterstream
+
+    # Sätt miljövariabler (om behövs)
+    - kubectl -n meterstream set env deploy/analytics ENVIRONMENT=staging
+
+    # Uppdatera till nybyggd image
+    - kubectl -n meterstream set image deploy/analytics analytics="${IMAGE_BASE}/analytics:${TAG}"
+
+    # Vänta på deploy
+    - kubectl -n meterstream rollout status deploy/analytics --timeout=120s
+  rules:
+    - when: manual
+```
+
+### 3. Skapa Deploy-jobb för Production
+
+```yaml
+deploy-analytics-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-analytics
+      optional: true
+  script:
+    # Samma som staging men med prod-specifika secrets/configs
+    - require_statefulset influxdb
+
+    - kubectl apply -f k8s/analytics/ -n meterstream
+
+    # Production env vars
+    - kubectl -n meterstream set env deploy/analytics ENVIRONMENT=production
+    - kubectl -n meterstream set env deploy/analytics API_KEY="$PROD_ANALYTICS_API_KEY"
+
+    # Använd version tag om det finns, annars commit SHA
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/analytics analytics="${IMAGE_BASE}/analytics:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/analytics --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+```
+
+### 4. Lägg till CI/CD variabler
+
+Gå till **Settings → CI/CD → Variables** och lägg till:
+- `PROD_ANALYTICS_API_KEY` (Masked, Protected)
+
+### 5. Skapa Kubernetes manifests
+
+Skapa `k8s/analytics/` med:
+- `deployment.yaml`
+- `service.yaml`
+- `configmap.yaml` (om behövs)
+
+### 6. Uppdatera Dependencies
+
+Om andra services beror på analytics, lägg till dependency check:
+
+```yaml
+deploy-frontend-staging:
+  script:
+    - require_running analytics  # Lägg till detta
+    - kubectl apply -f k8s/frontend/
+    # ...
+```
+
+### Checklista för nya services:
+
+- [ ] Skapa `services/<service-name>/Dockerfile`
+- [ ] Skapa `k8s/<service-name>/` med manifests
+- [ ] Lägg till `build-<service-name>` i `.gitlab-ci.yml`
+- [ ] Lägg till `deploy-<service-name>-staging`
+- [ ] Lägg till `deploy-<service-name>-prod`
+- [ ] Lägg till CI/CD variabler i GitLab
+- [ ] Uppdatera dependency checks i andra jobb
+- [ ] Uppdatera denna README med nya variabler/services

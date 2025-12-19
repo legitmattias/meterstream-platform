@@ -9,13 +9,15 @@
 #
 # Stages:
 #   1. test-connection - Verify kubectl connectivity
-#   2. build           - Build Docker images with Kaniko
-#   3. deploy-staging  - Deploy to staging (manual)
-#   4. deploy-prod     - Deploy to production (git tags only)
+#   2. Test            - Run tests for each service
+#   3. build           - Build Docker images with Kaniko
+#   4. deploy-staging  - Deploy to staging (manual)
+#   5. deploy-prod     - Deploy to production (git tags only)
 # ==============================================================================
 
 stages:
   - test-connection
+  - test
   - build
   - deploy-staging
   - deploy-prod
@@ -56,6 +58,60 @@ test-staging-connection:
 #     - kubectl get nodes
 #   rules:
 #     - when: manual
+
+# ==============================================================================
+# TEST STAGE - Run unit tests before building
+# ==============================================================================
+
+.test-python:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - cd services/${SERVICE_NAME}
+    - pip install --no-cache-dir -r requirements.txt
+    - pip install pytest pytest-cov pytest-asyncio
+  script:
+    - pytest tests/ -v --cov=src --cov-report=term --cov-report=xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: services/${SERVICE_NAME}/coverage.xml
+    expire_in: 1 week
+  rules:
+    - when: manual
+
+test-auth:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: auth
+    MONGODB_URI: "mongodb://localhost:27017"
+    JWT_SECRET: "test-secret-key"
+    DATABASE_NAME: "test-meterstream"
+
+test-ingestion:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: ingestion
+    NATS_URL: "nats://localhost:4222"
+
+test-processor:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: processor
+    NATS_URL: "nats://localhost:4222"
+    INFLUXDB_URL: "http://localhost:8086"
+    INFLUXDB_TOKEN: "test-token"
+
+test-gateway:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: gateway
+    JWT_SECRET: "test-secret"
+    AUTH_SERVICE_URL: "http://mock-auth:8000"
+    GRAFANA_SERVICE_URL: "http://mock-grafana:3000"
+    INGESTION_SERVICE_URL: "http://mock-ingestion:8000"
 
 # ==============================================================================
 # BUILD
@@ -106,21 +162,33 @@ test-staging-connection:
 
 build-ingestion:
   extends: .build
+  needs:
+    - job: test-ingestion
+      optional: true
   variables:
     SERVICE_NAME: ingestion
 
 build-auth:
   extends: .build
+  needs:
+    - job: test-auth
+      optional: true
   variables:
     SERVICE_NAME: auth
 
 build-processor:
   extends: .build
+  needs:
+    - job: test-processor
+      optional: true
   variables:
     SERVICE_NAME: processor
 
 build-gateway:
   extends: .build
+  needs:
+    - job: test-gateway
+      optional: true
   variables:
     SERVICE_NAME: gateway
 
@@ -290,10 +358,7 @@ deploy-auth-staging:
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Apply manifests (configmap, service, deployment)
-    # Note: Skipping k8s/auth/secret.yaml since we create it dynamically above
-    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
-    - kubectl apply -f k8s/auth/service.yaml -n meterstream
-    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
+    - kubectl apply -f k8s/auth/ -n meterstream
 
     # Enable test data seeding for staging
     - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
@@ -563,9 +628,11 @@ deploy-auth-prod:
         --from-literal=JWT_SECRET="$JWT_SECRET_PROD" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
-    - kubectl apply -f k8s/auth/service.yaml -n meterstream
-    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
+    - kubectl apply -f k8s/auth/ -n meterstream
+
+    # Enable test data seeding with production password
+    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
+    - kubectl -n meterstream set env deploy/auth TEST_USER_PASSWORD="$TEST_USER_PASSWORD"
 
     - |
       if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
