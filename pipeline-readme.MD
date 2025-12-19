@@ -100,6 +100,7 @@ Konfigureras i: **Settings → CI/CD → Variables**
 | `JWT_SECRET_PROD` | Production | JWT signing secret |
 | `STAG_BOOTSTRAP_ADMIN_PASSWORD` | Staging | Initial admin password |
 | `PROD_BOOTSTRAP_ADMIN_PASSWORD` | Production | Initial admin password |
+| `TEST_USER_PASSWORD` | Production | Lösenord för test-användare i production (staging använder default: `testpassword123`) |
 
 ---
 
@@ -279,3 +280,164 @@ cat kubeconfig-external.yaml | base64 -w0
 # Kopiera output → GitLab → Settings → CI/CD → Variables
 # Uppdatera KUBE_CONFIG_STAGING_B64 eller KUBE_CONFIG_PROD_B64
 ```
+
+---
+
+## Kubectl Apply: Ordning av Kommandon
+
+### Spelar ordningen roll?
+
+När du deployar med kubectl spelar **ordningen av vissa kommandon roll**, men inte alla:
+
+#### ✅ Ordning spelar INTE roll för:
+
+```yaml
+# Dessa kan köras i valfri ordning
+- kubectl apply -f k8s/auth/          # Applicera manifests
+- kubectl set env deploy/auth VAR=val # Sätt env vars
+- kubectl set env deploy/auth VAR2=val2
+```
+
+**Varför?** Kubernetes batchar ändringar. När du gör flera `kubectl set env`, startar pods om bara EN gång med alla ändringar.
+
+#### ⚠️ Ordning spelar roll för:
+
+```yaml
+# RÄTT ordning:
+- kubectl apply -f k8s/auth/          # 1. Skapa deployment
+- kubectl set env deploy/auth VAR=val # 2. Sätt env vars
+- kubectl set image deploy/auth ...   # 3. Byt image (triggar rollout)
+- kubectl rollout status deploy/auth  # 4. Vänta på completion
+```
+
+**Varför?**
+- `kubectl set image` triggar en ny rollout
+- Du vill att alla env vars ska vara satta INNAN rollout startar
+- `kubectl rollout status` måste komma sist för att vänta på deploy
+
+#### 📦 Applicera hela mappar istället för enskilda filer:
+
+```yaml
+# ❌ Långsamt och repetitivt
+- kubectl apply -f k8s/auth/configmap.yaml
+- kubectl apply -f k8s/auth/service.yaml
+- kubectl apply -f k8s/auth/deployment.yaml
+
+# ✅ Bättre: applicera hela mappen
+- kubectl apply -f k8s/auth/
+```
+
+Kubectl applicerar automatiskt alla `.yaml` filer i mappen.
+
+---
+
+## Lägga till ett nytt Deploy-steg
+
+Exempel: Lägg till en ny service `analytics` som beror på InfluxDB.
+
+### 1. Skapa Build-jobb
+
+```yaml
+build-analytics:
+  extends: .build
+  needs:
+    - job: test-analytics
+      optional: true
+  variables:
+    SERVICE_NAME: analytics
+```
+
+### 2. Skapa Deploy-jobb för Staging
+
+```yaml
+deploy-analytics-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-analytics
+      optional: true
+  script:
+    # Verifiera att dependencies finns
+    - require_statefulset influxdb
+
+    # Applicera Kubernetes manifests
+    - kubectl apply -f k8s/analytics/ -n meterstream
+
+    # Sätt miljövariabler (om behövs)
+    - kubectl -n meterstream set env deploy/analytics ENVIRONMENT=staging
+
+    # Uppdatera till nybyggd image
+    - kubectl -n meterstream set image deploy/analytics analytics="${IMAGE_BASE}/analytics:${TAG}"
+
+    # Vänta på deploy
+    - kubectl -n meterstream rollout status deploy/analytics --timeout=120s
+  rules:
+    - when: manual
+```
+
+### 3. Skapa Deploy-jobb för Production
+
+```yaml
+deploy-analytics-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-analytics
+      optional: true
+  script:
+    # Samma som staging men med prod-specifika secrets/configs
+    - require_statefulset influxdb
+
+    - kubectl apply -f k8s/analytics/ -n meterstream
+
+    # Production env vars
+    - kubectl -n meterstream set env deploy/analytics ENVIRONMENT=production
+    - kubectl -n meterstream set env deploy/analytics API_KEY="$PROD_ANALYTICS_API_KEY"
+
+    # Använd version tag om det finns, annars commit SHA
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/analytics analytics="${IMAGE_BASE}/analytics:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/analytics --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+```
+
+### 4. Lägg till CI/CD variabler
+
+Gå till **Settings → CI/CD → Variables** och lägg till:
+- `PROD_ANALYTICS_API_KEY` (Masked, Protected)
+
+### 5. Skapa Kubernetes manifests
+
+Skapa `k8s/analytics/` med:
+- `deployment.yaml`
+- `service.yaml`
+- `configmap.yaml` (om behövs)
+
+### 6. Uppdatera Dependencies
+
+Om andra services beror på analytics, lägg till dependency check:
+
+```yaml
+deploy-frontend-staging:
+  script:
+    - require_running analytics  # Lägg till detta
+    - kubectl apply -f k8s/frontend/
+    # ...
+```
+
+### Checklista för nya services:
+
+- [ ] Skapa `services/<service-name>/Dockerfile`
+- [ ] Skapa `k8s/<service-name>/` med manifests
+- [ ] Lägg till `build-<service-name>` i `.gitlab-ci.yml`
+- [ ] Lägg till `deploy-<service-name>-staging`
+- [ ] Lägg till `deploy-<service-name>-prod`
+- [ ] Lägg till CI/CD variabler i GitLab
+- [ ] Uppdatera dependency checks i andra jobb
+- [ ] Uppdatera denna README med nya variabler/services
