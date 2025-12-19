@@ -79,7 +79,7 @@ export function Dashboard() {
         <header className="dashboard-header">
           <h1>Your Analytics</h1>
           <div className="user-info">
-            <span>{user?.email || 'User'} · Customer ID: {user?.customerId || 'n/a'}</span>
+            <span>{user?.email || 'User'}</span>
             <button onClick={logout}>Logout</button>
           </div>
         </header>

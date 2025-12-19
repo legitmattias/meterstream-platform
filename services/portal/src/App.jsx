@@ -3,7 +3,7 @@ import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { Landing } from './pages/Landing'
-// import { ProtectedRoute } from './components/ProtectedRoute'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import './App.css'
 
 /**
@@ -18,9 +18,23 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         {/* Authenticated landing */}
-        <Route path="/dashboard" element={<Landing />} />
-        {/* Legacy analytics page (if needed) */}
-        <Route path="/analytics" element={<Dashboard />} />
+        <Route
+          path="/dashboard"
+          element={
+          //  <ProtectedRoute>
+              <Landing />
+          //  </ProtectedRoute>
+          }
+        />
+        {/* Analytics */}
+        <Route
+          path="/analytics"
+          element={
+          //  <ProtectedRoute>
+              <Dashboard />
+         //   </ProtectedRoute>
+          }
+        />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
