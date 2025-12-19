@@ -1,19 +1,16 @@
-#Innehåller dashboards som JSON (exporterade från Grafana GUI).
+# Innehåller dashboards som JSON (exporterade från Grafana GUI).
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-dashboards
 data:
-  aggregate-consumption.json: |-
+  landing-page.json: |-
     {
       "annotations": {
         "list": [
           {
             "builtIn": 1,
-            "datasource": {
-              "type": "grafana",
-              "uid": "-- Grafana --"
-            },
+            "datasource": { "type": "grafana", "uid": "-- Grafana --" },
             "enable": true,
             "hide": true,
             "iconColor": "rgba(0, 211, 255, 1)",
@@ -29,96 +26,328 @@ data:
       "links": [],
       "panels": [
         {
-          "datasource": {
-            "default": false,
-            "type": "influxdb",
-            "uid": "influxdb"
-          },
+          "datasource": { "default": false, "type": "influxdb", "uid": "influxdb" },
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "fixedColor": "light-blue",
-                "mode": "fixed"
-              },
+              "color": { "fixedColor": "light-blue", "mode": "fixed" },
               "custom": {
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisGridShow": true,
                 "axisLabel": "",
-                "axisPlacement": "left",
-                "axisWidth": 30,
+                "axisPlacement": "auto",
                 "fillOpacity": 100,
                 "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
                 "lineWidth": 1,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
+                "scaleDistribution": { "type": "linear" },
+                "thresholdsStyle": { "mode": "off" }
               },
               "mappings": [],
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "color": "green" },
+                  { "color": "green", "value": null },
                   { "color": "red", "value": 80 }
                 ]
               }
             },
             "overrides": []
           },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "gridPos": { "h": 12, "w": 17, "x": 0, "y": 0 },
           "id": 1,
           "options": {
-            "barRadius": 0.05,
-            "barWidth": 0.9,
+            "barRadius": 0.1,
+            "barWidth": 0.97,
             "colorByField": "Value",
             "fullHighlight": false,
             "groupWidth": 0.7,
-            "legend": {
-              "calcs": [ "min", "max" ],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": false
-            },
+            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
             "orientation": "auto",
-            "showValue": "always",
+            "showValue": "auto",
             "stacking": "none",
-            "text": {},
-            "tooltip": { "mode": "single", "sort": "desc" },
-            "xField": "Time",
+            "tooltip": { "mode": "single", "sort": "none" },
             "xTickLabelRotation": 0,
-            "xTickLabelSpacing": 100
+            "xTickLabelSpacing": 0
           },
           "targets": [
             {
               "datasource": { "type": "influxdb", "uid": "influxdb" },
-              "query": "from(bucket: \"meterstream\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\n  |> filter(fn: (r) => r._field == \"power_consumption\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n",
+              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> group()\r\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\r\n  |> yield(name: \"daily_sum\")\r\n",
               "refId": "A"
             }
           ],
-          "title": "Aggregate Energy Consumption",
+          "title": "Monitor",
           "type": "barchart"
         }
       ],
+      "refresh": "",
       "schemaVersion": 39,
       "tags": [],
       "templating": { "list": [] },
-      "time": {
-        "from": "2019-12-31T23:00:00.000Z",
-        "to": "2020-01-08T11:00:00.000Z"
-      },
+      "time": { "from": "2019-12-31T23:00:00.000Z", "to": "2020-01-07T23:00:00.000Z" },
       "timepicker": {},
-      "timezone": "Europe/Stockholm",
-      "title": "Aggregate - A3",
-      "uid": "af7e17ar78etcd",
-      "version": 2,
+      "timezone": "browser",
+      "title": "Landing page",
+      "uid": "ff7iuh80yjh8gd",
+      "version": 3,
+      "weekStart": ""
+    }
+
+  aggregated-bar-chart.json: |-
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": { "default": true, "type": "influxdb", "uid": "influxdb" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "fixedColor": "light-blue", "mode": "fixed" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "fillOpacity": 100,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "lineWidth": 2,
+                "scaleDistribution": { "type": "linear" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 80 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 14, "w": 23, "x": 0, "y": 0 },
+          "id": 1,
+          "options": {
+            "barRadius": 0.1,
+            "barWidth": 0.97,
+            "colorByField": "Value",
+            "fullHighlight": false,
+            "groupWidth": 0.7,
+            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+            "orientation": "auto",
+            "showValue": "auto",
+            "stacking": "none",
+            "tooltip": { "mode": "single", "sort": "none" },
+            "xField": "Time",
+            "xTickLabelRotation": 0,
+            "xTickLabelSpacing": 0
+          },
+          "targets": [
+            {
+              "datasource": { "type": "influxdb", "uid": "influxdb" },
+              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => contains(value: r.customer, set: ${customer:json}))\r\n  |> group()\r\n  |> aggregateWindow(\r\n      every: duration(v: \"${interval}\"),\r\n      fn: sum,\r\n      createEmpty: false\r\n    )\r\n",
+              "refId": "A"
+            }
+          ],
+          "title": "Aggregated Energy Consumption",
+          "type": "barchart"
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 39,
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": { "selected": false, "text": "1060598736", "value": "1060598736" },
+            "datasource": { "type": "influxdb", "uid": "influxdb" },
+            "definition": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(bucket: \"meterstream\", tag: \"customer\", predicate: (r) => r._measurement == \"meter_readings\")",
+            "hide": 0,
+            "includeAll": true,
+            "multi": true,
+            "name": "customer",
+            "options": [],
+            "query": { "query": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(bucket: \"meterstream\", tag: \"customer\", predicate: (r) => r._measurement == \"meter_readings\")" },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 0,
+            "type": "query"
+          },
+          {
+            "current": { "selected": false, "text": "1h", "value": "1h" },
+            "hide": 1,
+            "includeAll": false,
+            "multi": false,
+            "name": "interval",
+            "options": [
+              { "selected": true, "text": "1h", "value": "1h" },
+              { "selected": false, "text": "12h", "value": "12h" },
+              { "selected": false, "text": "24h", "value": "24h" },
+              { "selected": false, "text": "7d", "value": "7d" },
+              { "selected": false, "text": "30d", "value": "30d" },
+              { "selected": false, "text": "182d", "value": "182d" },
+              { "selected": false, "text": "365d", "value": "365d" }
+            ],
+            "query": "1h,12h,24h,7d,30d,182d,365d\n",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          }
+        ]
+      },
+      "time": { "from": "2019-12-31T23:00:00.000Z", "to": "2020-01-07T23:00:00.000Z" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Aggregated Bar Chart",
+      "uid": "af7irczysogzke",
+      "version": 6,
+      "weekStart": ""
+    }
+
+  aggregated-line-chart.json: |-
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": { "default": true, "type": "influxdb", "uid": "influxdb" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "fixedColor": "light-blue", "mode": "fixed" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 13,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 80 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 15, "w": 21, "x": 0, "y": 0 },
+          "id": 1,
+          "options": {
+            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "single", "sort": "none" }
+          },
+          "targets": [
+            {
+              "datasource": { "type": "influxdb", "uid": "influxdb" },
+              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => contains(value: r.customer, set: ${customer:json}))\r\n  |> group()\r\n  |> aggregateWindow(every: duration(v: \"${interval}\"), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n",
+              "refId": "A"
+            }
+          ],
+          "title": "Aggregated Line Chart",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 39,
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": { "selected": false, "text": "1060598736", "value": "1060598736" },
+            "datasource": { "type": "influxdb", "uid": "influxdb" },
+            "definition": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(bucket: \"meterstream\", tag: \"customer\", predicate: (r) => r._measurement == \"meter_readings\")",
+            "hide": 0,
+            "includeAll": true,
+            "multi": true,
+            "name": "customer",
+            "options": [],
+            "query": { "query": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(bucket: \"meterstream\", tag: \"customer\", predicate: (r) => r._measurement == \"meter_readings\")" },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 0,
+            "type": "query"
+          },
+          {
+            "current": { "selected": false, "text": "1h", "value": "1h" },
+            "hide": 0,
+            "includeAll": false,
+            "multi": false,
+            "name": "interval",
+            "options": [
+              { "selected": true, "text": "1h", "value": "1h" },
+              { "selected": false, "text": "12h", "value": "12h" },
+              { "selected": false, "text": "24h", "value": "24h" },
+              { "selected": false, "text": "7d", "value": "7d" },
+              { "selected": false, "text": "30d", "value": "30d" },
+              { "selected": false, "text": "182d", "value": "182d" },
+              { "selected": false, "text": "365d", "value": "365d" }
+            ],
+            "query": "1h,12h,24h,7d,30d,182d,365d",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          }
+        ]
+      },
+      "time": { "from": "now-6h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Aggregated Line Chart",
+      "uid": "df7iuv4kojsowd",
+      "version": 4,
       "weekStart": ""
     }
