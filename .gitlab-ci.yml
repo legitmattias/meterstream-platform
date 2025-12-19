@@ -358,10 +358,7 @@ deploy-auth-staging:
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Apply manifests (configmap, service, deployment)
-    # Note: Skipping k8s/auth/secret.yaml since we create it dynamically above
-    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
-    - kubectl apply -f k8s/auth/service.yaml -n meterstream
-    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
+    - kubectl apply -f k8s/auth/ -n meterstream
 
     # Enable test data seeding for staging
     - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
@@ -631,9 +628,11 @@ deploy-auth-prod:
         --from-literal=JWT_SECRET="$JWT_SECRET_PROD" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
-    - kubectl apply -f k8s/auth/service.yaml -n meterstream
-    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
+    - kubectl apply -f k8s/auth/ -n meterstream
+
+    # Enable test data seeding with production password
+    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
+    - kubectl -n meterstream set env deploy/auth TEST_USER_PASSWORD="$TEST_USER_PASSWORD"
 
     - |
       if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
