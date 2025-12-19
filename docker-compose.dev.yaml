@@ -89,6 +89,7 @@ services:
       JWT_ALGORITHM: HS256
       AUTH_SERVICE_URL: http://auth:8000
       INGESTION_SERVICE_URL: http://ingestion:8000
+      QUERIES_SERVICE_URL: http://queries:8000
       LOG_LEVEL: INFO
 
   ingestion:
@@ -105,7 +106,25 @@ services:
       NATS_URL: nats://nats:4222
       LOG_LEVEL: INFO
 
+  queries:
+    build:
+      context: ./services/queries
+      dockerfile: Dockerfile
+    container_name: meterstream-queries
+    ports:
+      - "8003:8000"
+    depends_on:
+      influxdb:
+        condition: service_started
+    environment:
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_ORG: ${INFLUXDB_INIT_ORG:-meterstream}
+      INFLUXDB_BUCKET: ${INFLUXDB_INIT_BUCKET:-data}
+      INFLUXDB_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-test-token}
+      LOG_LEVEL: INFO
+
 volumes:
   nats-data:
   influxdb-data:
   mongodb-data:
+

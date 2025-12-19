@@ -1,6 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { config } from '../config'
+import { api } from '../lib/api'
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+} from 'recharts'
 import './Dashboard.css'
 
 // Stable module-level constants to avoid memoization issues
@@ -17,27 +30,19 @@ const WEEK_SERIES_MAP = {
   ],
 }
 
-function genMonth(base) {
-  return Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1}`, value: base + ((i * 7) % 40) }))
-}
-
-const MONTH_SERIES_BY_YEAR = {
-  '2024': Object.fromEntries(MONTHS.map((m, idx) => [m, genMonth(95 + (idx % 6) * 5)])),
-  '2025': Object.fromEntries(MONTHS.map((m, idx) => [m, genMonth(110 + (idx % 6) * 5)])),
-}
-
-function genHourly(base) {
-  return Array.from({ length: 24 }, (_, i) => ({ label: `${i}:00`, value: base + ((i * 3) % 20) }))
-}
-
-const HOURLY_SERIES_BY_DAY = {
-  Mon: genHourly(10),
-  Tue: genHourly(12),
-  Wed: genHourly(9),
-  Thu: genHourly(14),
-  Fri: genHourly(11),
-  Sat: genHourly(7),
-  Sun: genHourly(8),
+const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+function getMostRecentDateForDayLabel(label) {
+  const targetIdx = DOW.indexOf(label)
+  if (targetIdx === -1) return null
+  const now = new Date()
+  const todayIdx = (now.getDay() + 6) % 7 // convert Sun=0.. to Mon=0..
+  const diff = (todayIdx - targetIdx + 7) % 7
+  const date = new Date(now)
+  date.setDate(now.getDate() - diff)
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 export function Dashboard() {
@@ -47,28 +52,60 @@ export function Dashboard() {
   const [selectedYear, setSelectedYear] = useState('All')
   const [selectedMonth, setSelectedMonth] = useState('January')
   const [selectedDay, setSelectedDay] = useState(null)
+  const [weekSeries, setWeekSeries] = useState([])
+  const [monthSeries, setMonthSeries] = useState([])
+  const [hourlySeries, setHourlySeries] = useState([])
+  const [loadingData, setLoadingData] = useState(false)
+  const [dataError, setDataError] = useState('')
 
-  const currentWeekSeries = WEEK_SERIES_MAP['Week 1'] || []
-  const currentMonthSeries = (selectedYear === 'All'
-    ? (MONTH_SERIES_BY_YEAR['2025'][selectedMonth] || [])
-    : (MONTH_SERIES_BY_YEAR[selectedYear]?.[selectedMonth] || []))
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoadingData(true)
+      setDataError('')
+      try {
+        const params = new URLSearchParams()
+        if (selectedYear && selectedYear !== 'All') params.set('year', String(selectedYear))
+        const monthIdx = MONTHS.indexOf(selectedMonth)
+        if (monthIdx !== -1 && selectedYear !== 'All') params.set('month', String(monthIdx + 1))
+        if (selectedDay) {
+          const date = getMostRecentDateForDayLabel(selectedDay)
+          if (date) params.set('date', date)
+        }
+        const data = await api.request(`/api/data/dashboard?${params.toString()}`)
 
-  const weekMax = Math.max(...currentWeekSeries.map((b) => b.value), 1)
-  const monthMax = Math.max(...currentMonthSeries.map((b) => b.value), 1)
-  const adminWeeklyMax = Math.max(...(WEEK_SERIES_MAP['Week 1'] || []).map((b) => b.value), 1)
-  const hourlySeries = selectedDay && HOURLY_SERIES_BY_DAY[selectedDay] ? HOURLY_SERIES_BY_DAY[selectedDay] : []
+        const weekly = (data.weekly_days || []).map(d => ({ label: d.day, value: d.consumption || 0 }))
+        const weeklyOrdered = DOW.map(day => weekly.find(w => w.label === day) || { label: day, value: 0 })
+        setWeekSeries(weeklyOrdered)
+
+        const monthly = (data.monthly_days || []).map(d => ({ label: String(d.day), value: d.consumption || 0 }))
+        setMonthSeries(monthly)
+
+        const hourly = (data.hourly || []).map(h => ({ label: `${h.hour}:00`, value: h.consumption || 0 }))
+        setHourlySeries(hourly)
+      } catch (err) {
+        console.error('Failed to load dashboard data', err)
+        setDataError(err.message || 'Failed to load data')
+      } finally {
+        setLoadingData(false)
+      }
+    }
+    fetchData()
+  }, [selectedYear, selectedMonth, selectedDay])
+
+  const weekMax = Math.max(...weekSeries.map((b) => b.value), 1)
+  const monthMax = Math.max(...monthSeries.map((b) => b.value), 1)
+  // admin weekly chart will use live weekSeries via Recharts
   const hourlyMax = Math.max(...hourlySeries.map((b) => b.value), 1)
   
 
-  const monthTotal = currentMonthSeries.reduce((sum, b) => sum + b.value, 0)
-  const monthAverage = currentMonthSeries.length ? monthTotal / currentMonthSeries.length : 0
+  const monthTotal = monthSeries.reduce((sum, b) => sum + b.value, 0)
+  const monthAverage = monthSeries.length ? monthTotal / monthSeries.length : 0
 
   const baseGrafanaUrl = config.grafanaDashboardUid
     ? `${config.grafanaUrl}/d/${config.grafanaDashboardUid}`
     : config.grafanaUrl
 
   const opsGrafanaUrl = `${baseGrafanaUrl}?view=ops`
-  const analyticsGrafanaUrl = `${baseGrafanaUrl}?view=analytics`
   const customerGrafanaUrl = `${baseGrafanaUrl}?view=customer${user?.customerId ? `&customer=${encodeURIComponent(user.customerId)}` : ''}`
   const customerGrafanaWithYear = selectedYear === 'All' ? customerGrafanaUrl : `${customerGrafanaUrl}&year=${selectedYear}`
 
@@ -109,12 +146,17 @@ export function Dashboard() {
                 ></iframe>
               </div>
             </div>
-            {/* Removed inline year total card; will show at bottom */}
+            {loadingData && (
+              <div className="dashboard-section"><div>Loading data…</div></div>
+            )}
+            {dataError && (
+              <div className="dashboard-section"><div style={{ color: '#b91c1c' }}>Error: {dataError}</div></div>
+            )}
 
             <div className="dashboard-section">
               <h2>Weekly view (per day)</h2>
               <div className="mini-bar-chart">
-                {currentWeekSeries.map((bar) => (
+                {weekSeries.map((bar) => (
                   <div
                     key={bar.label}
                     className={`bar ${selectedDay === bar.label ? 'selected' : ''}`}
@@ -157,7 +199,7 @@ export function Dashboard() {
                 </select>
               </div>
               <div className="mini-bar-chart">
-                {currentMonthSeries.map((bar) => (
+                {monthSeries.map((bar) => (
                   <div key={bar.label} className="bar">
                     <div className="bar-fill" style={{ height: `${(bar.value / monthMax) * 100}%` }}></div>
                     <span className="bar-day">{bar.label}</span>
@@ -277,14 +319,17 @@ export function Dashboard() {
           <div className="tab-content">
             <div className="dashboard-section">
               <h2>Aggregate Energy Consumption</h2>
-              <div className="grafana-embed">
-                <iframe
-                  src={analyticsGrafanaUrl}
-                  width="100%"
-                  height="300"
-                  frameBorder="0"
-                  title="Aggregate Energy Consumption"
-                ></iframe>
+              <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                  <LineChart data={monthSeries} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="value" name="Consumption (kWh)" stroke="#6366f1" dot={false} strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
@@ -373,26 +418,32 @@ export function Dashboard() {
 
             <div className="dashboard-section">
               <h2>Monthly Consumption</h2>
-              <div className="grafana-embed">
-                <iframe
-                  src={analyticsGrafanaUrl}
-                  width="100%"
-                  height="300"
-                  frameBorder="0"
-                  title="Monthly Consumption"
-                ></iframe>
+              <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                  <BarChart data={monthSeries} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="value" name="kWh" fill="#22c55e" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
             <div className="dashboard-section">
               <h2>This Week</h2>
-              <div className="mini-bar-chart">
-                {WEEK_SERIES_MAP['Week 1'].map((bar) => (
-                  <div key={bar.label} className="bar">
-                    <div className="bar-fill" style={{ height: `${(bar.value / adminWeeklyMax) * 100}%` }}></div>
-                    <span className="bar-day">{bar.label}</span>
-                  </div>
-                ))}
+              <div style={{ width: '100%', height: 220 }}>
+                <ResponsiveContainer>
+                  <BarChart data={weekSeries} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value" name="kWh" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 

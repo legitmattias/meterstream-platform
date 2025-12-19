@@ -4,8 +4,11 @@ import logging
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import settings
+
 from .influx import (
     get_influx_client,
     query_consumption,
@@ -39,6 +42,31 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Enable CORS for portal dev server and local testing
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+
+# Custom exception handler to ensure CORS headers on all responses
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": "http://localhost:5173",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
@@ -55,7 +83,7 @@ def get_customer_id(x_customer_id: Annotated[str | None, Header()] = None) -> st
 
 @app.get("/api/data/consumption", response_model=ConsumptionResponse)
 async def get_consumption(
-    x_customer_id: Annotated[str, Header()] = None,
+    x_customer_id: Annotated[str | None, Header()] = None,
     period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
 ):
     """
@@ -68,16 +96,17 @@ async def get_consumption(
     Returns:
         Consumption data points with timestamps
     """
-    customer_id = get_customer_id(x_customer_id)
+    if not x_customer_id:
+        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
 
     try:
         client = get_influx_client()
         query_api = client.query_api()
 
-        data = query_consumption(query_api, customer_id, period)
+        data = query_consumption(query_api, x_customer_id, period)
 
         return ConsumptionResponse(
-            customer_id=customer_id,
+            customer_id=x_customer_id,
             period=period,
             data=[
                 ConsumptionDataPoint(timestamp=d["timestamp"], consumption=d["consumption"])
@@ -86,13 +115,13 @@ async def get_consumption(
         )
 
     except Exception as e:
-        logger.error("Failed to query consumption for %s: %s", customer_id, e)
+        logger.error("Failed to query consumption for %s: %s", x_customer_id, e)
         raise HTTPException(status_code=500, detail="Failed to query data") from e
 
 
 @app.get("/api/data/summary", response_model=SummaryResponse)
 async def get_summary(
-    x_customer_id: Annotated[str, Header()] = None,
+    x_customer_id: Annotated[str | None, Header()] = None,
     period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
 ):
     """
@@ -105,28 +134,29 @@ async def get_summary(
     Returns:
         Summary statistics (total and average)
     """
-    customer_id = get_customer_id(x_customer_id)
+    if not x_customer_id:
+        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
 
     try:
         client = get_influx_client()
         query_api = client.query_api()
 
-        stats = query_summary(query_api, customer_id, period)
+        stats = query_summary(query_api, x_customer_id, period)
 
         return SummaryResponse(
-            customer_id=customer_id,
+            customer_id=x_customer_id,
             period=period,
             **stats,
         )
 
     except Exception as e:
-        logger.error("Failed to query summary for %s: %s", customer_id, e)
+        logger.error("Failed to query summary for %s: %s", x_customer_id, e)
         raise HTTPException(status_code=500, detail="Failed to query data") from e
 
 
 @app.get("/api/data/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
-    x_customer_id: Annotated[str, Header()] = None,
+    x_customer_id: Annotated[str | None, Header()] = None,
     year: str | None = Query(None),
     month: int | None = Query(None, ge=1, le=12),
     date: str | None = Query(None),
@@ -143,7 +173,11 @@ async def get_dashboard(
     Returns:
         Combined weekly, monthly, hourly data and summary statistics
     """
-    customer_id = get_customer_id(x_customer_id)
+    # If no customer ID, use default for testing
+    customer_id = x_customer_id or "test-customer"
+    
+    if not x_customer_id:
+        logger.warning("No X-Customer-ID header provided, using default customer ID for testing")
 
     try:
         client = get_influx_client()
