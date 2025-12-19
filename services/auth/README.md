@@ -57,12 +57,13 @@ make auth-test
 | `JWT_SECRET` | Secret key for JWT signing |
 | `BOOTSTRAP_ADMIN_PASSWORD` | Auto-creates admin user on startup |
 | `SEED_TEST_DATA` | Set `true` to seed test users (staging only) |
+| `TEST_USER_PASSWORD` | Password for seeded test users (default: testpassword123) |
 
 ## Bootstrap & Seeding
 
 On startup, the service:
 1. Creates admin user if `BOOTSTRAP_ADMIN_PASSWORD` is set and no admin exists
-2. Seeds test users if `SEED_TEST_DATA=true` (29 users linked to test customer IDs)
+2. Seeds test users if `SEED_TEST_DATA=true` (31 users including integration-test and data-loader)
 
 Both are idempotent - safe to run multiple times.
 

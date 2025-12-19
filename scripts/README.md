@@ -10,25 +10,37 @@ pip install -r requirements.txt
 
 ## produce_test_data.py
 
-Sends test data to the Ingestion Service.
+Sends test data to the Ingestion Service via the API Gateway. Authenticates as `data-loader@example.com` (seeded test user).
 
 ```bash
-# Send all data from small dataset
-python produce_test_data.py
+# Send to staging (authenticates automatically)
+python produce_test_data.py --url http://194.47.170.217
 
 # Send 100 readings slowly (for debugging)
-python produce_test_data.py --limit 100 --rate 2
+python produce_test_data.py --url http://staging.example --limit 100 --rate 2
 
 # Use medium dataset with large batches
-python produce_test_data.py --file ../data/test_data_medium.csv --batch-size 200
+python produce_test_data.py --url http://staging.example \
+  --file ../data/test_data_medium.csv --batch-size 200
+
+# Local development (no auth, direct to ingestion service)
+python produce_test_data.py --no-auth --url http://localhost:8000
+
+# Production (with strong password)
+TEST_USER_PASSWORD=strongpass python produce_test_data.py --url http://prod.example
 ```
 
 **Options:**
 - `--file` - CSV file path (default: small dataset)
-- `--url` - Ingestion service URL (default: http://localhost:8000)
+- `--url` - API Gateway URL (default: http://localhost:8000)
+- `--email` - Login email (default: data-loader@example.com)
 - `--batch-size` - Readings per request (default: 50)
 - `--rate` - Batches per second (default: 10, 0 = unlimited)
 - `--limit` - Max readings to send (default: 0 = all)
+- `--no-auth` - Skip authentication (for local dev)
+
+**Environment:**
+- `TEST_USER_PASSWORD` - Password for data-loader user (default: testpassword123)
 
 ## generate_test_token.py
 

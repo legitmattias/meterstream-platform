@@ -93,7 +93,14 @@ locust -f tests/load/locustfile.py \
   --spawn-rate 10 \
   --run-time 5m \
   --headless
+
+# With custom password (for production)
+TEST_USER_PASSWORD=strongpass locust -f tests/load/locustfile.py \
+  --host=http://prod.example --users 10 --spawn-rate 5 --headless
 ```
+
+**Environment:**
+- `TEST_USER_PASSWORD` - Password for integration-test user (default: testpassword123)
 
 ### Load Profiles
 
