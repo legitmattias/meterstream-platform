@@ -9,9 +9,10 @@
 #
 # Stages:
 #   1. test-connection - Verify kubectl connectivity
-#   2. build           - Build Docker images with Kaniko
-#   3. deploy-staging  - Deploy to staging (manual)
-#   4. deploy-prod     - Deploy to production (git tags only)
+#   2. Test            - Run tests for each service
+#   3. build           - Build Docker images with Kaniko
+#   4. deploy-staging  - Deploy to staging (manual)
+#   5. deploy-prod     - Deploy to production (git tags only)
 # ==============================================================================
 
 stages:
