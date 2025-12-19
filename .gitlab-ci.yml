@@ -76,7 +76,7 @@ test-staging-connection:
     reports:
       coverage_report:
         coverage_format: cobertura
-        path: services/${SERVICE_NAME}/coverage.xml
+        path: coverage.xml
     expire_in: 1 week
   rules:
     - when: manual  # Eller välj baserat på din strategi
@@ -85,8 +85,6 @@ test-auth:
   extends: .test-python
   variables:
     SERVICE_NAME: auth
-  # Mock environment variables som behövs för testerna
-  variables:
     MONGODB_URI: "mongodb://localhost:27017"
     JWT_SECRET: "test-secret-key"
     DATABASE_NAME: "test-meterstream"
@@ -95,14 +93,12 @@ test-ingestion:
   extends: .test-python
   variables:
     SERVICE_NAME: ingestion
-  variables:
     NATS_URL: "nats://localhost:4222"
 
 test-processor:
   extends: .test-python
   variables:
     SERVICE_NAME: processor
-  variables:
     NATS_URL: "nats://localhost:4222"
     INFLUXDB_URL: "http://localhost:8086"
     INFLUXDB_TOKEN: "test-token"
@@ -111,9 +107,10 @@ test-gateway:
   extends: .test-python
   variables:
     SERVICE_NAME: gateway
-  variables:
     JWT_SECRET: "test-secret"
     AUTH_SERVICE_URL: "http://mock-auth:8000"
+    GRAFANA_SERVICE_URL: "http://mock-grafana:3000"
+    INGESTION_SERVICE_URL: "http://mock-ingestion:8000"
 
 # ==============================================================================
 # BUILD
@@ -164,21 +161,33 @@ test-gateway:
 
 build-ingestion:
   extends: .build
+  needs:
+    - job: test-ingestion
+      optional: true
   variables:
     SERVICE_NAME: ingestion
 
 build-auth:
   extends: .build
+  needs:
+    - job: test-auth
+      optional: true
   variables:
     SERVICE_NAME: auth
 
 build-processor:
   extends: .build
+  needs:
+    - job: test-processor
+      optional: true
   variables:
     SERVICE_NAME: processor
 
 build-gateway:
   extends: .build
+  needs:
+    - job: test-gateway
+      optional: true
   variables:
     SERVICE_NAME: gateway
 
