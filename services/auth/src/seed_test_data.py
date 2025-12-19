@@ -23,6 +23,9 @@ TEST_USERS = [
     # Integration/load testing user (shared by all load test instances)
     {"email": "integration-test@example.com", "name": "Integration Test", "role": "internal", "customer_id": None},
 
+    # Data loader user (for produce_test_data.py script)
+    {"email": "data-loader@example.com", "name": "Data Loader", "role": "internal", "customer_id": None},
+
     # Internal staff user (no customer_id)
     {"email": "staff@example.com", "name": "Test Staff", "role": "internal", "customer_id": None},
 

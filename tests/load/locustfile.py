@@ -20,15 +20,16 @@ Load profiles:
     - Spike:  100 users, 1m - Sudden load burst
 """
 
-import json
+import os
 import random
 from datetime import datetime, timedelta, UTC
 from locust import HttpUser, task, between, events
 
 
-# Shared credentials for seeded test user (password from TEST_USER_PASSWORD env var)
+# Shared credentials for seeded test user
+# Password from TEST_USER_PASSWORD env var (default matches seed_test_data.py default)
 SHARED_TEST_EMAIL = "integration-test@example.com"
-SHARED_TEST_PASSWORD = "testpassword123"
+SHARED_TEST_PASSWORD = os.environ.get("TEST_USER_PASSWORD", "testpassword123")
 
 
 class MeterStreamUser(HttpUser):
