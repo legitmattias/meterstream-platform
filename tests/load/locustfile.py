@@ -146,11 +146,13 @@ class HighVolumeUser(HttpUser):
             return
 
         headers = {"Authorization": f"Bearer {self.token}"}
-        base_time = datetime.now(UTC) - timedelta(days=random.randint(1, 30))
+        # Use recent past timestamps (1-24 hours ago, going backwards)
+        # Avoids generating future timestamps that cause confusion in dashboards
+        base_time = datetime.now(UTC) - timedelta(hours=random.randint(1, 24))
 
         readings = []
         for i in range(50):  # 50 readings per request
-            timestamp = base_time + timedelta(hours=i)
+            timestamp = base_time - timedelta(minutes=i * 15)  # Go backwards in time
             readings.append(
                 {
                     "DateTime": timestamp.isoformat().replace("+00:00", "Z"),
