@@ -76,10 +76,10 @@ test-staging-connection:
     reports:
       coverage_report:
         coverage_format: cobertura
-        path: coverage.xml
+        path: services/${SERVICE_NAME}/coverage.xml
     expire_in: 1 week
   rules:
-    - when: manual  # Eller välj baserat på din strategi
+    - when: manual
 
 test-auth:
   extends: .test-python
