@@ -34,9 +34,6 @@ spec:
             - name: GF_SECURITY_ALLOW_EMBEDDING
               value: "true"
 
-            - name: GF_SECURITY_ALLOW_EMBEDDING
-              value: "true"
-
             - name: INFLUX_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -45,8 +42,7 @@ spec:
 
             # Auth Proxy - trust X-User-* headers from Gateway
             - name: GF_AUTH_PROXY_ENABLED
-              value: "false" #ska vara true
-              value: "false" #ska vara true
+              value: "true" # ska vara true
             - name: GF_AUTH_PROXY_HEADER_NAME
               value: "X-User-ID"
             - name: GF_AUTH_PROXY_HEADER_PROPERTY
@@ -58,7 +54,7 @@ spec:
 
             # Disable other auth methods
             - name: GF_AUTH_DISABLE_LOGIN_FORM
-              value: "false" # ska vara true
+              value: "true" # ska vara true
             # Disable anonymous access
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "false"
@@ -66,8 +62,8 @@ spec:
             - name: GF_AUTH_PROXY_HEADERS
               value: "Role:X-User-Role"
 
-            
-            # Subpath (if using /api/grafana/)
+            # %(protocol)s and %(domain)s automatically adapt to the request
+            # Works with: localhost, 194.47......(staging), 194.47...... (prod)
             - name: GF_SERVER_ROOT_URL
               value: "%(protocol)s://%(domain)s/api/grafana/"
             - name: GF_SERVER_SERVE_FROM_SUB_PATH
