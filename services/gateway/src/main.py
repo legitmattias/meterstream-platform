@@ -1,4 +1,12 @@
-"""API Gateway - JWT validation and request proxying to backend services."""
+"""API Gateway - JWT validation and request proxying to backend services.
+
+Notes on analytics integration:
+- Adds `/api/data/{path}` routes that proxy to the Queries service.
+- Applies global CORS middleware; preflight (OPTIONS) and all responses include CORS headers.
+- Proxies to Queries using corrected URLs: `.../api/data/{path}`.
+- Supports a dev toggle (`DISABLE_AUTH_FOR_DATA`) to bypass JWT on data routes,
+  forwarding `X-Customer-ID` from the client or `DEV_CUSTOMER_ID` when provided.
+"""
 
 import logging
 from contextlib import asynccontextmanager
@@ -6,6 +14,7 @@ from typing import AsyncGenerator
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -42,6 +51,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Global CORS middleware so all responses (incl. 404/500) carry headers
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 def get_http_client() -> httpx.AsyncClient:
     """Get the HTTP client from app state."""
@@ -71,13 +89,18 @@ async def proxy_request(
         Response from backend service
     """
     # Build headers, forwarding most original headers
+    dev_bypass = settings.disable_auth_for_data  # dev toggle: bypass JWT on data routes
+    original_x_customer_id = request.headers.get("x-customer-id")  # preserve customer id if provided
     headers = dict(request.headers)
     headers.pop("host", None)  # Remove host header
 
     # Strip X-User-* headers that clients might try to inject
     # These headers are trusted internally - only gateway should set them
-    for header in ["x-user-id", "x-user-role", "x-customer-id"]:
+    for header in ["x-user-id", "x-user-role"]:  # strip user context headers from client
         headers.pop(header, None)
+    # Only strip customer header when not in dev bypass (so we can forward it)
+    if not dev_bypass:  # only strip customer header when not bypassing
+        headers.pop("x-customer-id", None)
 
     # Add user context headers if authenticated
     if token_payload:
@@ -86,6 +109,12 @@ async def proxy_request(
             headers["X-User-Role"] = token_payload.role
         if token_payload.customer_id:
             headers["X-Customer-ID"] = token_payload.customer_id
+    elif dev_bypass:
+        # Dev bypass: forward provided X-Customer-ID or use configured default
+        if original_x_customer_id:
+            headers["X-Customer-ID"] = original_x_customer_id
+        elif settings.dev_customer_id:
+            headers["X-Customer-ID"] = settings.dev_customer_id
 
     # Read request body
     body = await request.body()
@@ -99,10 +128,16 @@ async def proxy_request(
             params=request.query_params,
         )
 
+        # Add CORS headers to all responses (incl. errors)
+        response_headers = dict(response.headers)
+        response_headers["Access-Control-Allow-Origin"] = "*"
+        response_headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        response_headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+
         return Response(
             content=response.content,
             status_code=response.status_code,
-            headers=dict(response.headers),
+            headers=response_headers,
         )
 
     except httpx.RequestError as e:
@@ -145,4 +180,56 @@ async def ingest_proxy_root(request: Request):
     token_payload = await validate_jwt(request)
     target_url = f"{settings.ingestion_service_url}/ingest"
     logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
+    return await proxy_request(request, target_url, token_payload)
+
+# QUERY SERVICE ADDED SAS
+# Data/Queries routes - JWT validation required, CORS support
+@app.api_route(
+    "/api/data/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+)
+async def data_proxy(request: Request, path: str):
+    """Proxy requests to Queries Service with JWT validation."""
+    # Handle CORS preflight requests
+    if request.method == "OPTIONS":
+        return Response(  # CORS preflight response
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    # Conditionally bypass JWT for local testing
+    token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)  # dev bypass
+    target_url = f"{settings.queries_service_url}/api/data/{path}"  # fix URL to queries /api/data
+    user_label = token_payload.sub if token_payload else "dev-bypass"
+    logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
+    return await proxy_request(request, target_url, token_payload)
+
+
+# Root data endpoint (for /api/data without trailing path)
+@app.api_route(
+    "/api/data",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+)
+async def data_proxy_root(request: Request):
+    """Proxy requests to Queries Service root with JWT validation."""
+    # Handle CORS preflight requests
+    if request.method == "OPTIONS":
+        return Response(  # CORS preflight response
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    # Conditionally bypass JWT for local testing
+    token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)  # dev bypass
+    target_url = f"{settings.queries_service_url}/api/data"  # queries root
+    user_label = token_payload.sub if token_payload else "dev-bypass"
+    logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
     return await proxy_request(request, target_url, token_payload)

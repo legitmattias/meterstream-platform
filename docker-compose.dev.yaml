@@ -90,6 +90,8 @@ services:
       AUTH_SERVICE_URL: http://auth:8000
       INGESTION_SERVICE_URL: http://ingestion:8000
       QUERIES_SERVICE_URL: http://queries:8000
+      DISABLE_AUTH_FOR_DATA: "true" # FOR TESTING PURPOSES ONLY - DO NOT USE IN PRODUCTION = FALSE
+      DEV_CUSTOMER_ID: "demo-customer" # 
       LOG_LEVEL: INFO
 
   ingestion:

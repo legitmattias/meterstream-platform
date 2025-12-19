@@ -19,7 +19,11 @@ class Settings(BaseSettings):
     # Backend service URLs (K8s service DNS names)
     auth_service_url: str = "http://auth:8000"
     ingestion_service_url: str = "http://ingestion:8000"
-    queries_service_url: str = "http://queries:8000" # ADDED BY SAS REMOVE
+    queries_service_url: str = "http://queries:8000" # 
+    # Dev toggle to disable auth on data endpoints
+    disable_auth_for_data: bool = False
+    # Optional default customer id when bypassing auth
+    dev_customer_id: str | None = None
 
     log_level: str = "INFO"
 
