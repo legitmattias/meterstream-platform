@@ -143,7 +143,13 @@ async def ingest_proxy(request: Request):
 async def grafana_proxy(request: Request, path: str):
     """Proxy requests to Grafana with JWT validation and X-User headers."""
     token_payload = await validate_jwt(request)
-    target_url = f"{settings.grafana_service_url}/{path}"
+
+    # Restrict to internal/admin only (commented out for testing)
+    # if token_payload.role not in ["admin", "internal"]:
+    #     raise HTTPException(status_code=403, detail="Grafana access requires internal or admin role")
+
+    # Grafana runs with GF_SERVER_SERVE_FROM_SUB_PATH=true, so it expects /api/grafana/ prefix
+    target_url = f"{settings.grafana_service_url}/api/grafana/{path}"
     logger.debug("Proxying grafana request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)
 
@@ -156,6 +162,12 @@ async def grafana_proxy(request: Request, path: str):
 async def grafana_proxy_root(request: Request):
     """Proxy requests to Grafana root with JWT validation."""
     token_payload = await validate_jwt(request)
-    target_url = settings.grafana_service_url
+
+    # Restrict to internal/admin only (commented out for testing)
+    # if token_payload.role not in ["admin", "internal"]:
+    #     raise HTTPException(status_code=403, detail="Grafana access requires internal or admin role")
+
+    # Grafana runs with GF_SERVER_SERVE_FROM_SUB_PATH=true, so it expects /api/grafana/ prefix
+    target_url = f"{settings.grafana_service_url}/api/grafana/"
     logger.debug("Proxying grafana request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)
