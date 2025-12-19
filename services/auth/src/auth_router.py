@@ -217,6 +217,86 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
 
     return tokens
 
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def delete_user(
+    request: Request,
+    user_id: str,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection)
+):
+    """
+    Delete a user by ID. Admin only.
+    """
+    # Check Authorization header exists
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Extract token from "Bearer <token>"
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format. Expected 'Bearer <token>'",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    token = parts[1]
+
+    # Verify token
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Check admin role
+    if payload.get("role") != "admin":
+        logger.warning(
+            "Non-admin attempted to delete user",
+            extra={"requester_id": payload.get("user_id"), "target_id": user_id, **get_client_info(request)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+
+    # Validate user ID format
+    if not user_id or len(user_id) != 24 or not all(c in '0123456789abcdefABCDEF' for c in user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    # Delete user
+    try:
+        result = await users.delete_one({"_id": ObjectId(user_id)})
+    except InvalidId:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    logger.info(
+        "User deleted",
+        extra={"deleted_user_id": user_id, "admin_id": payload.get("user_id"), **get_client_info(request)}
+    )
+
+    return None
+
+
 @router.get("/me", response_model=UserResponse)
 @limiter.limit("30/minute")  # Max 30 requests per minute per IP
 async def me(request: Request, authorization: Optional[str] = Header(None), users=Depends(get_users_collection)):
