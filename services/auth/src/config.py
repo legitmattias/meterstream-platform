@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str = "admin@meterstream.local"
     bootstrap_admin_password: str | None = None
 
+    # Seed test data (for staging/development only)
+    seed_test_data: bool = False
+    test_user_password: str = "testpassword123"
+
 """Singelton pattern, create only once"""
 @lru_cache
 def get_settings() -> Settings:

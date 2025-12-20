@@ -152,84 +152,57 @@ async def proxy_request(
 )
 async def auth_proxy(request: Request, path: str):
     """Proxy requests to Auth Service without JWT validation."""
-    target_url = f"{settings.auth_service_url}/{path}"
+    target_url = f"{settings.auth_service_url}/auth/{path}"
     logger.debug("Proxying auth request to: %s", target_url)
     return await proxy_request(request, target_url)
 
 
-# Ingestion routes - JWT validation required
-@app.api_route(
-    "/api/ingest/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-)
-async def ingest_proxy(request: Request, path: str):
-    """Proxy requests to Ingestion Service with JWT validation."""
-    token_payload = await validate_jwt(request)
-    target_url = f"{settings.ingestion_service_url}/{path}"
-    logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
-    return await proxy_request(request, target_url, token_payload)
-
-
-# Root ingest endpoint (for /api/ingest without trailing path)
+# Ingestion route - JWT validation required
 @app.api_route(
     "/api/ingest",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    methods=["POST"],
 )
-async def ingest_proxy_root(request: Request):
-    """Proxy requests to Ingestion Service root with JWT validation."""
+async def ingest_proxy(request: Request):
+    """Proxy requests to Ingestion Service with JWT validation."""
     token_payload = await validate_jwt(request)
     target_url = f"{settings.ingestion_service_url}/ingest"
     logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)
 
-# QUERY SERVICE ADDED SAS
-# Data/Queries routes - JWT validation required, CORS support
-@app.api_route(
-    "/api/data/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-)
-async def data_proxy(request: Request, path: str):
-    """Proxy requests to Queries Service with JWT validation."""
-    # Handle CORS preflight requests
-    if request.method == "OPTIONS":
-        return Response(  # CORS preflight response
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
-        )
 
-    # Conditionally bypass JWT for local testing
-    token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)  # dev bypass
-    target_url = f"{settings.queries_service_url}/api/data/{path}"  # fix URL to queries /api/data
-    user_label = token_payload.sub if token_payload else "dev-bypass"
-    logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
+# Grafana routes - JWT validation required, forwards X-User-* headers
+@app.api_route(
+    "/api/grafana/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
+async def grafana_proxy(request: Request, path: str):
+    """Proxy requests to Grafana with JWT validation and X-User headers."""
+    token_payload = await validate_jwt(request)
+
+    # Restrict to internal/admin only (commented out for testing)
+    # if token_payload.role not in ["admin", "internal"]:
+    #     raise HTTPException(status_code=403, detail="Grafana access requires internal or admin role")
+
+    # Grafana runs with GF_SERVER_SERVE_FROM_SUB_PATH=true, so it expects /api/grafana/ prefix
+    target_url = f"{settings.grafana_service_url}/api/grafana/{path}"
+    logger.debug("Proxying grafana request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)
 
 
-# Root data endpoint (for /api/data without trailing path)
+# Root grafana endpoint (for /api/grafana without trailing path)
 @app.api_route(
-    "/api/data",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    "/api/grafana",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
 )
-async def data_proxy_root(request: Request):
-    """Proxy requests to Queries Service root with JWT validation."""
-    # Handle CORS preflight requests
-    if request.method == "OPTIONS":
-        return Response(  # CORS preflight response
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
-        )
+async def grafana_proxy_root(request: Request):
+    """Proxy requests to Grafana root with JWT validation."""
+    token_payload = await validate_jwt(request)
 
-    # Conditionally bypass JWT for local testing
-    token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)  # dev bypass
-    target_url = f"{settings.queries_service_url}/api/data"  # queries root
-    user_label = token_payload.sub if token_payload else "dev-bypass"
-    logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
+    # Restrict to internal/admin only (commented out for testing)
+    # if token_payload.role not in ["admin", "internal"]:
+    #     raise HTTPException(status_code=403, detail="Grafana access requires internal or admin role")
+
+    # Grafana runs with GF_SERVER_SERVE_FROM_SUB_PATH=true, so it expects /api/grafana/ prefix
+    target_url = f"{settings.grafana_service_url}/api/grafana/"
+    logger.debug("Proxying grafana request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)

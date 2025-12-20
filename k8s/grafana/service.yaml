@@ -1,0 +1,11 @@
+#Exponerar Grafana internt i klustret som en ClusterIP-service på port 3000 (default-värde, går att byta, lite krångel).
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
