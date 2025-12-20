@@ -32,6 +32,10 @@ spec:
               value: "http://auth:8000"
             - name: INGESTION_SERVICE_URL
               value: "http://ingestion:8000"
+            # ==== ANALYTICS INTEGRATION: Add queries service URL ====
+            - name: QUERIES_SERVICE_URL
+              value: "http://queries:8000"
+            # ==== END ANALYTICS INTEGRATION ====
             - name: LOG_LEVEL
               value: "INFO"
           resources:

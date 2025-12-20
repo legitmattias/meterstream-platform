@@ -1,0 +1,21 @@
+# ==============================================================================
+# ANALYTICS INTEGRATION: Queries Service
+# ==============================================================================
+# Exposes the queries service internally within the cluster on port 8000.
+# ==============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: queries
+  labels:
+    app: queries
+spec:
+  selector:
+    app: queries
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP
