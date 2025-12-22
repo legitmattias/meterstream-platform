@@ -39,6 +39,18 @@
       "enabled": true
     },
     {
+      "key": "device_email",
+      "value": "device-meter-1@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "device_password",
+      "value": "testpassword123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
       "key": "admin_email",
       "value": "admin@example.com",
       "type": "default",
