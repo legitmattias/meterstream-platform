@@ -6,6 +6,7 @@ import { MonthBarChart } from '../components/MonthBarChart'
 import AdminDashboard from './AdminDashboard'
 import './Dashboard.css'
 import { MONTHS, DOW, getMostRecentDateForDayLabel } from '../lib/dashboardUtils'
+<<<<<<< HEAD
 
 export function Dashboard() {
   const { user, logout, loading } = useAuth()
@@ -254,24 +255,10 @@ import AdminDashboard from './AdminDashboard'
 import { MonthBarChart } from '../components/MonthBarChart'
 import AdminDashboard from './AdminDashboard'
 import './Dashboard.css'
+=======
+>>>>>>> 38e43e7 (updated dashboard for api and added helpers to queries)
 
-// Stable module-level constants to avoid memoization issues
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-
-const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-function getMostRecentDateForDayLabel(label) {
-  const targetIdx = DOW.indexOf(label)
-  if (targetIdx === -1) return null
-  const now = new Date()
-  const todayIdx = (now.getDay() + 6) % 7 // convert Sun=0.. to Mon=0..
-  const diff = (todayIdx - targetIdx + 7) % 7
-  const date = new Date(now)
-  date.setDate(now.getDate() - diff)
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
+// (MONTHS, DOW and getMostRecentDateForDayLabel are imported from ../lib/dashboardUtils)
 
 export function Dashboard() {
   // --- All state declarations at the top ---
@@ -305,27 +292,27 @@ export function Dashboard() {
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
   // Prefer totals coming from the API when available
-  const [totalConsumption, setTotalConsumption] = useState(null)
-  const [averageConsumption, setAverageConsumption] = useState(null)
+  const [total, setTotal] = useState(null)
+  const [average, setAverage] = useState(null)
 
   // --- Effects and logic below ---
-  // Fetch data quality metrics when analytics tab is active (admin only)
-  useEffect(() => {
-    if (activeTab === 'analytics' && role === 'admin') {
-      api.request('/data/quality')
-        .then(data => {
-          setQuality({
-            completeness: data.completeness,
-            accuracy: data.accuracy,
-            timeliness: data.timeliness,
+    // Fetch data quality metrics when analytics tab is active (admin/internal roles)
+    useEffect(() => {
+      if (activeTab === 'analytics' && role !== 'customer') {
+        api.request('/data/quality')
+          .then(data => {
+            setQuality({
+              completeness: data.completeness ?? null,
+              accuracy: data.accuracy ?? null,
+              timeliness: data.timeliness ?? null,
+            })
           })
-        })
-        .catch(err => {
-          console.error('Failed to fetch data quality', err)
-          setQuality({ completeness: null, accuracy: null, timeliness: null })
-        })
-    }
-  }, [activeTab, role])
+          .catch(err => {
+            console.error('Failed to fetch data quality', err)
+            setQuality({ completeness: null, accuracy: null, timeliness: null })
+          })
+      }
+    }, [activeTab, role])
 
   // Fetch top consumers and logs when the user is an admin (run on role change)
   useEffect(() => {
@@ -390,8 +377,8 @@ export function Dashboard() {
         setHourlySeries(hourly)
 
         // If backend provides total/average use them, otherwise keep null and rely on computed values
-        setTotalConsumption(typeof data.total === 'number' ? data.total : null)
-        setAverageConsumption(typeof data.average === 'number' ? data.average : null)
+        setTotal(typeof data.total === 'number' ? data.total : (data.total ?? null))
+        setAverage(typeof data.average === 'number' ? data.average : (data.average ?? null))
       } catch (err) {
         console.error('Failed to load dashboard data', err)
         setDataError(err.message || 'Failed to load data')
@@ -574,21 +561,20 @@ export function Dashboard() {
               <div className="summary-card blue">
                 <div className="summary-label">Total Consumption</div>
                 <div className="summary-value">
-                  {totalConsumption !== null
-                    ? `${totalConsumption.toFixed(0)} kWh`
+                  {total !== null
+                    ? `${Number(total).toFixed(0)} kWh`
                     : (monthSeries && monthSeries.length > 0 ? `${monthTotal.toFixed(0)} kWh` : '—')}
                 </div>
               </div>
               <div className="summary-card purple">
                 <div className="summary-label">Average</div>
                 <div className="summary-value">
-                  {averageConsumption !== null
-                    ? `${averageConsumption.toFixed(0)} kWh/day`
+                  {average !== null
+                    ? `${Number(average).toFixed(0)} kWh/day`
                     : (monthSeries && monthSeries.length > 0 ? `${monthAverage.toFixed(0)} kWh/day` : '—')}
                 </div>
               </div>
             </div>
-          </div>
         </main>
       </div>
     )
