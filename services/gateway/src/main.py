@@ -206,3 +206,57 @@ async def grafana_proxy_root(request: Request):
     target_url = f"{settings.grafana_service_url}/api/grafana/"
     logger.debug("Proxying grafana request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)
+
+
+# ==== ANALYTICS INTEGRATION: Query service routes ====
+# Data/Queries routes - JWT validation required, CORS support
+@app.api_route(
+    "/api/data/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+)
+async def data_proxy(request: Request, path: str):
+    """Proxy requests to Queries Service with JWT validation."""
+    # Handle CORS preflight requests
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    # Conditionally bypass JWT for local testing
+    token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)
+    target_url = f"{settings.queries_service_url}/api/data/{path}"
+    user_label = token_payload.sub if token_payload else "dev-bypass"
+    logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
+    return await proxy_request(request, target_url, token_payload)
+
+
+# Root data endpoint (for /api/data without trailing path)
+@app.api_route(
+    "/api/data",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+)
+async def data_proxy_root(request: Request):
+    """Proxy requests to Queries Service root with JWT validation."""
+    # Handle CORS preflight requests
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    # Conditionally bypass JWT for local testing
+    token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)
+    target_url = f"{settings.queries_service_url}/api/data"
+    user_label = token_payload.sub if token_payload else "dev-bypass"
+    logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
+    return await proxy_request(request, target_url, token_payload)
+# ==== END ANALYTICS INTEGRATION ====
