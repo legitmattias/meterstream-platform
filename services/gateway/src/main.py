@@ -133,11 +133,8 @@ async def proxy_request(
             params=request.query_params,
         )
 
-        # Add CORS headers to all responses (incl. errors)
+        # Note: CORS headers are handled by CORSMiddleware globally
         response_headers = dict(response.headers)
-        response_headers["Access-Control-Allow-Origin"] = "*"
-        response_headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-        response_headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
 
         return Response(
             content=response.content,
@@ -237,16 +234,7 @@ async def grafana_proxy_root(request: Request):
 )
 async def data_proxy(request: Request, path: str):
     """Proxy requests to Queries Service with JWT validation."""
-    # Handle CORS preflight requests
-    if request.method == "OPTIONS":
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
-        )
+    # Note: CORS preflight (OPTIONS) is handled by CORSMiddleware
 
     # Conditionally bypass JWT for local testing
     token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)
@@ -263,16 +251,7 @@ async def data_proxy(request: Request, path: str):
 )
 async def data_proxy_root(request: Request):
     """Proxy requests to Queries Service root with JWT validation."""
-    # Handle CORS preflight requests
-    if request.method == "OPTIONS":
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            },
-        )
+    # Note: CORS preflight (OPTIONS) is handled by CORSMiddleware
 
     # Conditionally bypass JWT for local testing
     token_payload = None if settings.disable_auth_for_data else await validate_jwt(request)
