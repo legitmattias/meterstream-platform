@@ -223,6 +223,12 @@ async def get_dashboard(
         raise HTTPException(status_code=500, detail="Failed to query data") from e
 
 
+<<<<<<< HEAD
+=======
+# Note: more fully-typed/response-modeled endpoints for quality, top-consumers
+# and logs are defined further below (with response models). The simple stubs
+# above have been removed to avoid duplicated route definitions during merges.
+>>>>>>> 38e43e7 (updated dashboard for api and added helpers to queries)
 @app.get("/api/data/quality", response_model=DataQuality)
 async def get_quality(
     x_customer_id: Annotated[str | None, Header()] = None,
@@ -250,7 +256,11 @@ async def get_top_consumers(
     x_customer_id: Annotated[str | None, Header()] = None,
     limit: int = Query(5, ge=1, le=50),
 ):
+<<<<<<< HEAD
     """Stub endpoint returning an empty top-consumers list (backed by Influx later)."""
+=======
+    """Stub endpoint returning an empty top-consumers list."""
+>>>>>>> 38e43e7 (updated dashboard for api and added helpers to queries)
     if not x_customer_id:
         raise HTTPException(status_code=403, detail="X-Customer-ID header required")
     try:
@@ -258,6 +268,10 @@ async def get_top_consumers(
         query_api = client.query_api()
         consumers = query_top_consumers(query_api, limit=limit)
         return TopConsumersResponse(customer_id=x_customer_id, consumers=[
+<<<<<<< HEAD
+=======
+            # Map results to ConsumerData-like dicts (name, consumption)
+>>>>>>> 38e43e7 (updated dashboard for api and added helpers to queries)
             {"name": c.get("name"), "consumption": c.get("consumption")} for c in consumers
         ])
     except Exception as e:
