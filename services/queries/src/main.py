@@ -250,7 +250,7 @@ async def get_top_consumers(
     x_customer_id: Annotated[str | None, Header()] = None,
     limit: int = Query(5, ge=1, le=50),
 ):
-    """Stub endpoint returning an empty top-consumers list."""
+    """Stub endpoint returning an empty top-consumers list (backed by Influx later)."""
     if not x_customer_id:
         raise HTTPException(status_code=403, detail="X-Customer-ID header required")
     try:
@@ -258,7 +258,6 @@ async def get_top_consumers(
         query_api = client.query_api()
         consumers = query_top_consumers(query_api, limit=limit)
         return TopConsumersResponse(customer_id=x_customer_id, consumers=[
-            # Map results to ConsumerData-like dicts (name, consumption)
             {"name": c.get("name"), "consumption": c.get("consumption")} for c in consumers
         ])
     except Exception as e:

@@ -1,7 +1,5 @@
 import React from 'react'
 import { SummaryCards } from '../components/SummaryCards'
-import { MonthBarChart } from '../components/MonthBarChart'
-import { WeekBarChart } from '../components/WeekBarChart'
 import { TopConsumersTable } from '../components/TopConsumersTable'
 import { LogsList } from '../components/LogsList'
 
@@ -23,6 +21,8 @@ export default function AdminDashboard(props) {
     weekSeries,
   } = props
 
+  const role = user?.role || 'customer'
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
@@ -33,7 +33,6 @@ export default function AdminDashboard(props) {
         </div>
       </header>
 
-      {/* Summary Cards - calculated from fetched data, shown for all roles */}
       <SummaryCards
         monthTotal={monthTotal}
         monthAverage={monthAverage}
@@ -42,22 +41,52 @@ export default function AdminDashboard(props) {
       />
 
       <div className="tabs">
-        <button
-          className={`tab-button ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
-        >
-          System Overview
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'analytics' ? 'active' : ''}`}
-          onClick={() => setActiveTab('analytics')}
-        >
-          Consumer Analytics
-        </button>
+        {role === 'admin' ? (
+          <>
+            <button
+              className={`tab-button ${activeTab === 'overview' ? 'active' : ''}`}
+              onClick={() => setActiveTab('overview')}
+            >
+              System Overview
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'analytics' ? 'active' : ''}`}
+              onClick={() => setActiveTab('analytics')}
+            >
+              Consumer Analytics
+            </button>
+          </>
+        ) : (
+          <button
+            className={`tab-button ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            Consumer Analytics
+          </button>
+        )}
       </div>
 
+      {role === 'admin' && (
+        <div className="admin-actions" style={{ margin: '0.5rem 0' }}>
+          <a
+            className="grafana-button"
+            href={opsGrafanaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open Grafana
+          </a>
+        </div>
+      )}
+
+      {role !== 'customer' && (
+        <div style={{ margin: '0.5rem 0' }}>
+          <a className="grafana-button" href="/landing">Back to Landing</a>
+        </div>
+      )}
+
       <main className="dashboard-content">
-        {activeTab === 'overview' && (
+        {role === 'admin' && activeTab === 'overview' && (
           <div className="tab-content">
             <div className="dashboard-section">
               <h2>Real-Time Ingestion Metrics</h2>
@@ -73,29 +102,8 @@ export default function AdminDashboard(props) {
             </div>
 
             <div className="dashboard-section">
-              <h2>Queue Length</h2>
-              <div className="grafana-embed">
-                <iframe
-                  src={opsGrafanaUrl}
-                  width="100%"
-                  height="300"
-                  frameBorder="0"
-                  title="Queue Length"
-                ></iframe>
-              </div>
-            </div>
-
-            <div className="dashboard-section">
-              <h2>Processing Rate</h2>
-              <div className="grafana-embed">
-                <iframe
-                  src={opsGrafanaUrl}
-                  width="100%"
-                  height="300"
-                  frameBorder="0"
-                  title="Processing Rate"
-                ></iframe>
-              </div>
+              <h2>Top Consumers</h2>
+              <TopConsumersTable consumers={topConsumers} />
             </div>
 
             <div className="dashboard-section">
@@ -105,62 +113,22 @@ export default function AdminDashboard(props) {
           </div>
         )}
 
-        {activeTab === 'analytics' && (
+        {(activeTab === 'analytics' || (activeTab === 'overview' && role !== 'admin')) && (
           <div className="tab-content">
-            <div className="dashboard-section">
-              <h2>Aggregate Energy Consumption</h2>
-              <MonthBarChart data={monthSeries} type="line" />
-            </div>
-
-            <div className="dashboard-grid">
+            {role !== 'customer' && (
               <div className="dashboard-section">
-                <h2>Top Consumers</h2>
-                <TopConsumersTable consumers={topConsumers} />
-              </div>
-
-              <div className="dashboard-section">
-                <h2>Data Quality</h2>
-                <div className="quality-metrics">
-                  <div className="quality-item">
-                    <div className="quality-header">
-                      <span>Completeness</span>
-                      <span className="quality-value">{quality.completeness !== null ? `${quality.completeness}%` : 'N/A'}</span>
-                    </div>
-                    <div className="quality-bar">
-                      <div className="quality-fill" style={{ width: quality.completeness !== null ? `${quality.completeness}%` : '0%' }}></div>
-                    </div>
-                  </div>
-                  <div className="quality-item">
-                    <div className="quality-header">
-                      <span>Accuracy</span>
-                      <span className="quality-value">{quality.accuracy !== null ? `${quality.accuracy}%` : 'N/A'}</span>
-                    </div>
-                    <div className="quality-bar">
-                      <div className="quality-fill" style={{ width: quality.accuracy !== null ? `${quality.accuracy}%` : '0%' }}></div>
-                    </div>
-                  </div>
-                  <div className="quality-item">
-                    <div className="quality-header">
-                      <span>Timeliness</span>
-                      <span className="quality-value">{quality.timeliness !== null ? `${quality.timeliness}%` : 'N/A'}</span>
-                    </div>
-                    <div className="quality-bar">
-                      <div className="quality-fill" style={{ width: quality.timeliness !== null ? `${quality.timeliness}%` : '0%' }}></div>
-                    </div>
-                  </div>
+                <h2>Consumer Grafana</h2>
+                <div className="grafana-embed">
+                  <iframe
+                    src={opsGrafanaUrl}
+                    width="100%"
+                    height="400"
+                    frameBorder="0"
+                    title="Consumer Analytics (Grafana)"
+                  ></iframe>
                 </div>
               </div>
-            </div>
-
-            <div className="dashboard-section">
-              <h2>Monthly Consumption</h2>
-              <MonthBarChart data={monthSeries} />
-            </div>
-
-            <div className="dashboard-section">
-              <h2>This Week</h2>
-              <WeekBarChart data={weekSeries} />
-            </div>
+            )}
           </div>
         )}
       </main>
