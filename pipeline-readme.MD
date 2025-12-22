@@ -456,14 +456,17 @@ Vänta tills alla tre är Ready innan du fortsätter
 4. deploy-auth-staging        # Behöver MongoDB
 5. deploy-ingestion-staging   # Behöver NATS
 6. deploy-processor-staging   # Behöver NATS + InfluxDB
+
 ### FAS 3: API-lager
 
 7. deploy-queries-staging     # Behöver InfluxDB
 8. deploy-gateway-staging     # Behöver Auth + Ingestion
+
 ### FAS 4: Frontend & Monitoring
 
 9. deploy-grafana-staging     # Behöver InfluxDB
 10. deploy-portal-staging     # Behöver Gateway
+
 ### FAS 5: Nätverksrouting
 
 11. deploy-ingress-staging    # Sista steget
