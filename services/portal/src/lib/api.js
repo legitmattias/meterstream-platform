@@ -29,8 +29,15 @@ class ApiClient {
       const response = await fetch(url, config)
 
       // Handle 401 Unauthorized
+      // Don't redirect if we're already on /login or /register, or if it's /auth/me checking session
       if (response.status === 401) {
-        window.location.href = '/login'
+        const currentPath = window.location.pathname
+        const isAuthCheck = endpoint === '/auth/me'
+        const isOnAuthPage = currentPath === '/login' || currentPath === '/register'
+
+        if (!isAuthCheck && !isOnAuthPage) {
+          window.location.href = '/login'
+        }
         throw new Error('Unauthorized')
       }
 
