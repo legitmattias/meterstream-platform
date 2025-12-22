@@ -18,4 +18,4 @@ data:
   log_level: "INFO"
 
   # Bootstrap admin
-  bootstrap_admin_email: "admin@meterstream.local"
+  bootstrap_admin_email: "admin@meterstream.com"
