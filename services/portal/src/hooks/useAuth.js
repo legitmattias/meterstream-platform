@@ -31,20 +31,17 @@ export function useAuth() {
   }, [])
 
   const login = async (email, password) => {
-    const data = await api.login(email, password)
+    await api.login(email, password)
     // Cookie is set automatically by backend
-    // Get user info from backend
-    try {
-      const userData = await api.request('/auth/me')
-      setUser({
-        email: userData.email,
-        role: userData.role,
-        customerId: userData.customer_id,
-      })
-    } catch (error) {
-      console.error('Failed to get user info after login:', error)
-    }
-    return data
+    // User info will be fetched by initAuth on next render
+    // Force re-check authentication state
+    const userData = await api.request('/auth/me')
+    setUser({
+      email: userData.email,
+      role: userData.role,
+      customerId: userData.customer_id,
+    })
+    setLoading(false)
   }
 
   const logout = async () => {
