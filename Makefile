@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token peek-kafka extract-data clean
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token peek-kafka extract-data clean integration-test load-interactive load-smoke load-normal load-stress load-spike
 
 help:
 	@echo "MeterStream Development Commands"
@@ -33,9 +33,20 @@ help:
 	@echo "  make gateway-lint    Run linter on gateway"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make producer-run    Run the test data producer"
-	@echo "  make generate-token  Generate a test JWT token"
-	@echo "  make peek-kafka      Peek at Kalmar Energi Team 1's Kafka stream"
+	@echo "  make producer-run      Run the test data producer"
+	@echo "  make generate-token    Generate a test JWT token"
+	@echo "  make peek-kafka        Peek at Kalmar Energi Team 1's Kafka stream"
+	@echo ""
+	@echo "Integration Tests (Newman):"
+	@echo "  make integration-test  Run Newman API tests against staging"
+	@echo "                         Pass ADMIN_PASSWORD=xxx for cleanup tests"
+	@echo ""
+	@echo "Load Tests (Locust):"
+	@echo "  make load-interactive  Open web UI at http://localhost:8089"
+	@echo "  make load-smoke        Quick sanity check (1 user, 30s)"
+	@echo "  make load-normal       Baseline performance (10 users, 2m)"
+	@echo "  make load-stress       Stress test for HPA scaling (50 users, 5m)"
+	@echo "  make load-spike        Sudden load burst (100 users, 1m)"
 	@echo ""
 	@echo "Data:"
 	@echo "  make extract-data    Regenerate test_data_large.csv (50 customers, 4 years)"
@@ -135,6 +146,39 @@ peek-kafka:
 # Extract test data from source dataset
 extract-data:
 	python3 scripts/extract_test_data.py -n 50 --seed 42 -o test_data_large.csv
+
+# Integration Tests (Newman)
+STAGING_URL ?= http://194.47.170.217
+ADMIN_PASSWORD ?=
+
+integration-test:
+	newman run tests/integration/collections/meterstream-api.json \
+		--environment tests/integration/environments/staging.json \
+		--env-var "admin_password=$(ADMIN_PASSWORD)"
+
+# Load Tests (Locust)
+load-interactive:
+	locust -f tests/load/locustfile.py --host=$(STAGING_URL)
+
+load-smoke:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 1 --spawn-rate 1 --run-time 30s --headless
+
+load-normal:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 10 --spawn-rate 5 --run-time 2m --headless
+
+load-stress:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 50 --spawn-rate 10 --run-time 5m --headless
+
+load-spike:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 100 --spawn-rate 50 --run-time 1m --headless
 
 # Cleanup
 clean:
