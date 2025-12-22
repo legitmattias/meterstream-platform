@@ -4,7 +4,7 @@
   "values": [
     {
       "key": "base_url",
-      "value": "http://staging.meterstream.example",
+      "value": "http://194.47.170.217",
       "type": "default",
       "enabled": true
     },
@@ -16,8 +16,26 @@
     },
     {
       "key": "test_password",
-      "value": "integration-test-password-123",
+      "value": "testpassword123",
       "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "seeded_user_email",
+      "value": "alice.andersson@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "seeded_user_password",
+      "value": "testpassword123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "seeded_user_customer_id",
+      "value": "1060598736",
+      "type": "default",
       "enabled": true
     },
     {
