@@ -3,7 +3,7 @@
 Test data producer script.
 
 Reads meter readings from CSV and sends them to the Ingestion Service via the API Gateway.
-Authenticates as data-loader user and sends readings in batches at a configurable rate.
+Authenticates as data-loader user (internal role) and sends readings in batches at a configurable rate.
 
 Usage:
     # Against staging (uses default data-loader credentials)
@@ -27,6 +27,7 @@ import requests
 
 
 # Default credentials for data-loader user (seeded by auth service)
+# Uses internal role which is authorized to ingest meter data
 DEFAULT_EMAIL = "data-loader@example.com"
 DEFAULT_PASSWORD = os.environ.get("TEST_USER_PASSWORD", "testpassword123")
 
