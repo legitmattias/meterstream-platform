@@ -10,19 +10,6 @@ import { config } from '../config'
 class ApiClient {
   constructor() {
     this.baseUrl = config.apiBaseUrl
-    this.token = null
-  }
-
-  setToken(token) {
-    this.token = token
-  }
-
-  getToken() {
-    return this.token
-  }
-
-  clearToken() {
-    this.token = null
   }
 
   async request(endpoint, options = {}) {
@@ -32,22 +19,25 @@ class ApiClient {
       ...options.headers,
     }
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
-    }
-
     const config = {
       ...options,
       headers,
+      credentials: 'include',  // Send cookies with requests (JWT in HttpOnly cookie)
     }
 
     try {
       const response = await fetch(url, config)
 
       // Handle 401 Unauthorized
+      // Don't redirect if we're already on /login or /register, or if it's /auth/me checking session
       if (response.status === 401) {
-        this.clearToken()
-        window.location.href = '/login'
+        const currentPath = window.location.pathname
+        const isAuthCheck = endpoint === '/auth/me'
+        const isOnAuthPage = currentPath === '/login' || currentPath === '/register'
+
+        if (!isAuthCheck && !isOnAuthPage) {
+          window.location.href = '/login'
+        }
         throw new Error('Unauthorized')
       }
 
@@ -66,19 +56,16 @@ class ApiClient {
   }
 
   // Auth endpoints
+  // NOTE: Endpoints should NOT include /api prefix - it's added via baseUrl
   async login(email, password) {
-    const data = await this.request('/api/auth/login', {
+    return this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
-    if (data.access_token) {
-      this.setToken(data.access_token)
-    }
-    return data
   }
 
   async register(email, password, name) {
-    return this.request('/api/auth/register', {
+    return this.request('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     })
