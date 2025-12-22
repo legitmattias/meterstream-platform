@@ -192,3 +192,11 @@ Pull from InfluxDB aggregations (sum, average queries)
 
 # MINA SIDOR DASHBOARD
 - Individual data consumption
+
+# Recommended next work 
+
+Implement Influx-backed top-consumers aggregate (group by consumer.id) in influx.py and wire it into /api/data/top-consumers 
+
+Implement a simple completeness metric for data-quality (e.g., presence of expected daily points over last 7 days) and add accuracy/timeliness definitions.
+
+Wire logs to a log store (Loki/Elasticsearch) or a small log table if you have logs centrally.
