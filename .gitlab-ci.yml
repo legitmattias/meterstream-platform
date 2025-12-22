@@ -551,8 +551,8 @@ deploy-portal-staging:
   needs:
     - job: build-portal
       optional: true
-    - job: deploy-gateway-staging
-      optional: true
+    # - job: deploy-gateway-staging
+    #   optional: true
   script:
     # Verify required dependencies are running
     - require_running gateway
