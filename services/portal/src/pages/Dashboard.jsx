@@ -6,24 +6,9 @@ import { api } from '../lib/api'
 import { MonthBarChart } from '../components/MonthBarChart'
 import AdminDashboard from './AdminDashboard'
 import './Dashboard.css'
+import { MONTHS, DOW, getMostRecentDateForDayLabel } from '../lib/dashboardUtils'
 
-// Stable module-level constants to avoid memoization issues
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-
-const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-function getMostRecentDateForDayLabel(label) {
-  const targetIdx = DOW.indexOf(label)
-  if (targetIdx === -1) return null
-  const now = new Date()
-  const todayIdx = (now.getDay() + 6) % 7 // convert Sun=0.. to Mon=0..
-  const diff = (todayIdx - targetIdx + 7) % 7
-  const date = new Date(now)
-  date.setDate(now.getDate() - diff)
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
+// (MONTHS, DOW and getMostRecentDateForDayLabel are imported from ../lib/dashboardUtils)
 
 export function Dashboard() {
   // --- All state declarations at the top ---
@@ -41,24 +26,33 @@ export function Dashboard() {
   const [hourlySeries, setHourlySeries] = useState([])
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
+  const [total, setTotal] = useState(null)
+  const [average, setAverage] = useState(null)
 
   // --- Effects and logic below ---
   // Fetch data quality metrics when analytics tab is active
   useEffect(() => {
-    if (activeTab === 'analytics') {
+    // Only fetch admin/internal endpoints for non-customer roles
+    if (activeTab === 'analytics' && role !== 'customer') {
       api.request('/data/quality')
         .then(data => {
           setQuality({
-            completeness: data.completeness,
-            accuracy: data.accuracy,
-            if (selectedDay) {
-              const date = getMostRecentDateForDayLabel(selectedDay)
-              if (date) params.set('date', date)
-            }
-            
+            completeness: data.completeness ?? null,
+            accuracy: data.accuracy ?? null,
+            timeliness: data.timeliness ?? null,
+          })
+        })
+        .catch(err => {
+          console.error('Failed to fetch data quality', err)
+          setQuality({ completeness: null, accuracy: null, timeliness: null })
+        })
+    }
+  }, [activeTab, role])
+
   // Fetch top consumers and logs when analytics tab is active
   useEffect(() => {
-    if (activeTab === 'analytics') {
+    // Only fetch admin/internal endpoints for non-customer roles
+    if (activeTab === 'analytics' && role !== 'customer') {
       api.request('/data/top-consumers')
         .then(data => {
           setTopConsumers(data.consumers || [])
@@ -76,7 +70,7 @@ export function Dashboard() {
           setLogs([])
         })
     }
-  }, [activeTab])
+  }, [activeTab, role])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -91,11 +85,12 @@ export function Dashboard() {
           const date = getMostRecentDateForDayLabel(selectedDay)
           if (date) params.set('date', date)
         }
-<<<<<<< HEAD
 
-=======
->>>>>>> origin/development
         const data = await api.request(`/data/dashboard?${params.toString()}`)
+
+        // Summary values returned by the dashboard endpoint
+        setTotal(data.total ?? null)
+        setAverage(data.average ?? null)
 
         const weekly = (data.weekly_days || []).map(d => ({ label: d.day, value: d.consumption || 0 }))
         const weeklyOrdered = DOW.map(day => weekly.find(w => w.label === day) || { label: day, value: 0 })
@@ -238,13 +233,13 @@ export function Dashboard() {
               <div className="summary-card blue">
                 <div className="summary-label">Total Consumption</div>
                 <div className="summary-value">
-                  {monthSeries && monthSeries.length > 0 ? `${monthTotal.toFixed(0)} kWh` : '—'}
+                  {total !== null ? `${Number(total).toFixed(0)} kWh` : (monthSeries && monthSeries.length > 0 ? `${monthTotal.toFixed(0)} kWh` : '—')}
                 </div>
               </div>
               <div className="summary-card purple">
                 <div className="summary-label">Average</div>
                 <div className="summary-value">
-                  {monthSeries && monthSeries.length > 0 ? `${monthAverage.toFixed(0)} kWh/day` : '—'}
+                  {average !== null ? `${Number(average).toFixed(0)} kWh/day` : (monthSeries && monthSeries.length > 0 ? `${monthAverage.toFixed(0)} kWh/day` : '—')}
                 </div>
               </div>
             </div>

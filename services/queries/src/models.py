@@ -66,3 +66,32 @@ class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str = "ok"
+
+
+class DataQuality(BaseModel):
+    """Data quality metrics (placeholders until implemented)."""
+
+    completeness: float | None = None
+    accuracy: float | None = None
+    timeliness: float | None = None
+
+
+class ConsumerData(BaseModel):
+    """Top consumer entry."""
+
+    name: str
+    consumption: float
+
+
+class TopConsumersResponse(BaseModel):
+    """Response for top consumers endpoint."""
+
+    customer_id: str
+    consumers: list[ConsumerData] = []
+
+
+class LogsResponse(BaseModel):
+    """Simple logs response placeholder."""
+
+    customer_id: str
+    logs: list[str] = []

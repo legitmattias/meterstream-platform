@@ -42,7 +42,7 @@ def query_weekly_days(
     from(bucket: "{settings.influx_bucket}")
       |> range(start: -7d)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      |> filter(fn: (r) => r.customer == "{customer_id}")
+    |> filter(fn: (r) => r["consumer.id"] == "{customer_id}")
       {year_filter}
       |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
@@ -91,7 +91,7 @@ def query_monthly_days(
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start_date.isoformat()}Z, stop: {end_date.isoformat()}Z)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      |> filter(fn: (r) => r.customer == "{customer_id}")
+    |> filter(fn: (r) => r["consumer.id"] == "{customer_id}")
       |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
     '''
@@ -136,7 +136,7 @@ def query_hourly(
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start.isoformat()}Z, stop: {end.isoformat()}Z)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      |> filter(fn: (r) => r.customer == "{customer_id}")
+    |> filter(fn: (r) => r["consumer.id"] == "{customer_id}")
       |> aggregateWindow(every: 1h, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
     '''
@@ -177,7 +177,7 @@ def query_total_and_average(
     from(bucket: "{settings.influx_bucket}")
       |> range(start: -365d)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      |> filter(fn: (r) => r.customer == "{customer_id}")
+    |> filter(fn: (r) => r["consumer.id"] == "{customer_id}")
       {year_filter}
     '''
 
@@ -232,7 +232,7 @@ def query_consumption(
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start})
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      |> filter(fn: (r) => r.customer == "{customer_id}")
+    |> filter(fn: (r) => r["consumer.id"] == "{customer_id}")
       |> aggregateWindow(every: {window}, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
     '''
@@ -281,7 +281,7 @@ def query_summary(
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start})
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      |> filter(fn: (r) => r.customer == "{customer_id}")
+      |> filter(fn: (r) => r["consumer.id"] == "{customer_id}")
     '''
 
     tables = query_api.query(flux_query, org=settings.influx_org)
@@ -303,3 +303,71 @@ def query_summary(
         "total": sum(values),
         "average": sum(values) / len(values),
     }
+
+
+def query_top_consumers(
+    query_api: QueryApi,
+    limit: int = 5,
+    days: int = 30,
+) -> list[dict[str, Any]]:
+    """
+    Query top consumers across customers by summed consumption over the last `days`.
+
+    Returns: list of {name: customer_id, consumption: float}
+    """
+    start = f"-{days}d"
+
+    flux_query = f'''
+    from(bucket: "{settings.influx_bucket}")
+      |> range(start: {start})
+      |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
+      |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)
+    |> group(columns: ["consumer.id"])
+      |> sum(column: "_value")
+      |> sort(columns: ["_value"], desc: true)
+      |> limit(n: {limit})
+    '''
+
+    tables = query_api.query(flux_query, org=settings.influx_org)
+
+    results: dict[str, float] = {}
+    for table in tables:
+        for record in table.records:
+            customer = record.values.get("consumer.id") or record.values.get("consumer_id") or "unknown"
+            val = record.get_value()
+            if val is None:
+                continue
+            results[customer] = results.get(customer, 0.0) + float(val)
+
+    return [{"name": k, "consumption": v} for k, v in sorted(results.items(), key=lambda kv: kv[1], reverse=True)][:limit]
+
+
+def query_quality_metrics(
+    query_api: QueryApi,
+    customer_id: str,
+    period: str = "daily",
+) -> dict[str, Any]:
+    """
+    Compute simple data quality metrics based on presence of consumption points.
+
+    - completeness: percent of expected windows that have data (>0)
+    - accuracy: not implemented (returns None)
+    - timeliness: not implemented (returns None)
+
+    Returns dict with keys completeness, accuracy, timeliness
+    """
+    # Map period to expected number of points (matches query_consumption windows)
+    expected_map = {"daily": 24, "weekly": 4, "monthly": 12}
+    expected = expected_map.get(period, 24)
+
+    try:
+        data = query_consumption(query_api, customer_id, period)
+        observed = sum(1 for d in data if (d.get("consumption") is not None and float(d.get("consumption", 0)) != 0))
+
+        completeness = None
+        if expected > 0:
+            completeness = (observed / expected) * 100.0
+
+        return {"completeness": round(completeness, 2) if completeness is not None else None, "accuracy": None, "timeliness": None}
+    except Exception:
+        return {"completeness": None, "accuracy": None, "timeliness": None}
