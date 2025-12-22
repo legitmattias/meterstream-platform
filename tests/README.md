@@ -51,21 +51,34 @@ newman run tests/integration/collections/meterstream-api.json \
 
 | Folder | Tests |
 |--------|-------|
-| Health Checks | Gateway health endpoint |
-| Auth Flow | Register, login, get user, refresh token |
-| Auth Error Cases | Wrong password, missing/invalid token |
-| Ingestion | Single reading, batch, without auth |
-| Cleanup | Delete test user (requires admin) |
+| 1. Health Checks | Gateway health endpoint |
+| 2. Auth Flow | Register, login, get user, refresh token, logout |
+| 3. Ingestion | Single reading, batch, without auth (error case) |
+| 4. Full Pipeline | Login seeded user → ingest data → query dashboard/consumption/summary |
+| 5. Data Query Errors | Query without auth, query with invalid token |
+| 6. Auth Error Cases | Wrong password, missing/invalid token |
+| 7. Cleanup | Delete test user (requires admin) |
+
+The **Full Pipeline** tests use a seeded user with `customer_id` to verify the complete data flow:
+1. Login as seeded user (e.g., alice.andersson@example.com)
+2. JWT contains `customer_id` claim
+3. Ingest meter data for that customer
+4. Query data through `/api/data/*` endpoints
+5. Verify gateway adds `X-Customer-ID` header for customer isolation
 
 ### Environment Variables
 
-- `base_url` - API base URL (e.g., `http://staging.meterstream.example`)
-- `test_email` - Test user email
+- `base_url` - API base URL (e.g., `http://194.47.170.217`)
+- `test_email` - Test user email for basic auth tests
 - `test_password` - Test user password
+- `seeded_user_email` - Seeded user with customer_id (e.g., alice.andersson@example.com)
+- `seeded_user_password` - Seeded user password (default: testpassword123)
+- `seeded_user_customer_id` - Customer ID for pipeline tests (e.g., 1060598736)
 - `admin_email` - Admin user email (for cleanup)
 - `admin_password` - Admin password (**pass via CLI, not stored in file**)
 - `access_token` - Set automatically after login
 - `refresh_token` - Set automatically after login
+- `seeded_user_token` - Set automatically for pipeline tests
 
 ## Load Tests (Locust)
 
