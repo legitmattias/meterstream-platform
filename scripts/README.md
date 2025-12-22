@@ -42,6 +42,37 @@ TEST_USER_PASSWORD=strongpass python produce_test_data.py --url http://prod.exam
 **Environment:**
 - `TEST_USER_PASSWORD` - Password for data-loader user (default: testpassword123)
 
+## extract_test_data.py
+
+Extracts test data subsets from the full Kalmar Energi dataset. Creates CSV files matching the test data schema with configurable customer count and time range.
+
+**Requires:** Access to the source dataset (`meterstream-filer/data/final_df.csv/final_df.csv`)
+
+```bash
+# 50 customers, full 4 years (2020-2023), ~34 MB (use seed for consistency)
+python extract_test_data.py -n 50 --seed 42 -o test_data_large.csv
+
+# 100 customers, year 2022 only
+python extract_test_data.py -n 100 --start 2022-01-01 --end 2022-12-31 -o test_data_2022.csv
+
+# 30 customers, 2 years for year-over-year comparison
+python extract_test_data.py -n 30 --start 2022-01-01 --end 2023-12-31 -o test_data_yoy.csv
+
+# Reproducible extraction with seed
+python extract_test_data.py -n 50 --seed 42 -o test_data_large.csv
+```
+
+**Options:**
+- `-n, --customers` - Number of customers to include (required)
+- `--start` - Start date YYYY-MM-DD (default: 2020-01-01)
+- `--end` - End date YYYY-MM-DD (default: 2023-12-31)
+- `-o, --output` - Output filename in data/ directory (required)
+- `--seed` - Random seed for reproducible customer selection
+- `--source` - Custom source file path
+- `--output-dir` - Custom output directory
+
+**Note:** Actual file sizes depend on customer data completeness. The source data has gaps, so results are typically smaller than theoretical estimates (50 customers × 4 years = ~34 MB actual vs ~91 MB theoretical).
+
 ## generate_test_token.py
 
 Generates JWT tokens for testing the API Gateway.
