@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token peek-kafka clean
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token peek-kafka extract-data clean
 
 help:
 	@echo "MeterStream Development Commands"
@@ -36,6 +36,11 @@ help:
 	@echo "  make producer-run    Run the test data producer"
 	@echo "  make generate-token  Generate a test JWT token"
 	@echo "  make peek-kafka      Peek at Kalmar Energi Team 1's Kafka stream"
+	@echo ""
+	@echo "Data:"
+	@echo "  make extract-data    Regenerate test_data_large.csv (50 customers, 4 years)"
+	@echo "                       Requires source dataset in meterstream-filer/"
+	@echo "                       Use scripts/extract_test_data.py for custom extractions"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean         Remove all containers and volumes"
@@ -126,6 +131,10 @@ generate-token:
 peek-kafka:
 	@test -d scripts/node_modules || (cd scripts && npm install)
 	cd scripts && node peek_kalmar1_kafka.js
+
+# Extract test data from source dataset
+extract-data:
+	python3 scripts/extract_test_data.py -n 50 --seed 42 -o test_data_large.csv
 
 # Cleanup
 clean:
