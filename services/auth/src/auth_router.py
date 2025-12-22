@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, status, Depends, Request, Header
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Header, Response
 from datetime import datetime, UTC
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -39,7 +39,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")  # Max 5 registrations per minute per IP
-async def register(request: Request, user_data: UserRegister, users=Depends(get_users_collection)):
+async def register(request: Request, response: Response, user_data: UserRegister, users=Depends(get_users_collection)):
     """
     Register a new user.
 
@@ -111,7 +111,7 @@ async def register(request: Request, user_data: UserRegister, users=Depends(get_
 
 @router.post("/login", response_model=TokenPairResponse)
 @limiter.limit("10/minute")  # Max 10 login attempts per minute per IP
-async def login(request: Request, user_data: UserLogin, users=Depends(get_users_collection)):
+async def login(request: Request, response: Response, user_data: UserLogin, users=Depends(get_users_collection)):
     """
     Login and receive JWT token.
 
@@ -167,7 +167,40 @@ async def login(request: Request, user_data: UserLogin, users=Depends(get_users_
         }
     )
 
+    # Set JWT as HttpOnly cookie
+    response.set_cookie(
+        key="access_token",
+        value=tokens.access_token,
+        httponly=True,        # Cannot be read by JavaScript
+        secure=False,          # False for HTTP, True for HTTPS
+        samesite="lax",       # CSRF protection
+        max_age=3600,         # 1 hour (match JWT expiry)
+        path="/"
+    )
+
     return tokens
+
+
+@router.post("/logout")
+@limiter.limit("30/minute")
+async def logout(request: Request, response: Response):
+    """
+    Logout user by clearing authentication cookie.
+
+    Returns:
+        Success message
+    """
+    # Clear the access_token cookie
+    response.delete_cookie(key="access_token", path="/")
+
+    # Audit log for logout
+    logger.info(
+        "User logged out",
+        extra=get_client_info(request)
+    )
+
+    return {"message": "Logged out successfully"}
+
 
 @router.post("/refresh", response_model=TokenPairResponse)
 @limiter.limit("5/hour")  # Max 5 refresh requests per hour per IP (access tokens expire every 60 min)

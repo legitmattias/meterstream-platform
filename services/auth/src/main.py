@@ -2,6 +2,7 @@
 
 import logging
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -47,6 +48,20 @@ app = FastAPI(
     description="Authentication service with JWT tokens",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Add CORS middleware (required for cookie-based auth)
+# NOTE: allow_credentials=True requires specific origins (cannot use "*")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",      # Local dev
+        "http://194.47.170.217",      # Staging
+        "http://localhost:3000",      # Alternative dev port
+    ],
+    allow_credentials=True,           # Required for cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Add rate limiting

@@ -10,19 +10,6 @@ import { config } from '../config'
 class ApiClient {
   constructor() {
     this.baseUrl = config.apiBaseUrl
-    this.token = null
-  }
-
-  setToken(token) {
-    this.token = token
-  }
-
-  getToken() {
-    return this.token
-  }
-
-  clearToken() {
-    this.token = null
   }
 
   async request(endpoint, options = {}) {
@@ -32,13 +19,10 @@ class ApiClient {
       ...options.headers,
     }
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
-    }
-
     const config = {
       ...options,
       headers,
+      credentials: 'include',  // Send cookies with requests (JWT in HttpOnly cookie)
     }
 
     try {
@@ -46,7 +30,6 @@ class ApiClient {
 
       // Handle 401 Unauthorized
       if (response.status === 401) {
-        this.clearToken()
         window.location.href = '/login'
         throw new Error('Unauthorized')
       }
@@ -68,14 +51,10 @@ class ApiClient {
   // Auth endpoints
   // NOTE: Endpoints should NOT include /api prefix - it's added via baseUrl
   async login(email, password) {
-    const data = await this.request('/auth/login', {
+    return this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
-    if (data.access_token) {
-      this.setToken(data.access_token)
-    }
-    return data
   }
 
   async register(email, password, name) {
