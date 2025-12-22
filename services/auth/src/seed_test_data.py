@@ -29,6 +29,10 @@ TEST_USERS = [
     # Internal staff user (no customer_id)
     {"email": "staff@example.com", "name": "Test Staff", "role": "internal", "customer_id": None},
 
+    # Device users (for meter data ingestion - IoT devices, data relays)
+    {"email": "device-meter-1@example.com", "name": "Meter Device 1", "role": "device", "customer_id": None},
+    {"email": "device-meter-2@example.com", "name": "Meter Device 2", "role": "device", "customer_id": None},
+
     # Customers with 3 users each (family/business accounts)
     {"email": "alice.andersson@example.com", "name": "Alice Andersson", "role": "customer", "customer_id": "1060598736"},
     {"email": "bob.andersson@example.com", "name": "Bob Andersson", "role": "customer", "customer_id": "1060598736"},
