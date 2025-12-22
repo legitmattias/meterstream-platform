@@ -192,10 +192,10 @@ build-gateway:
   variables:
     SERVICE_NAME: gateway
 
-build-frontend:
-  extends: .build
-  variables:
-    SERVICE_NAME: frontend
+# build-frontend:
+#   extends: .build
+#   variables:
+#     SERVICE_NAME: frontend
 
 # ==============================================================================
 # ANALYTICS INTEGRATION: Build jobs for queries and portal services
@@ -477,17 +477,17 @@ deploy-gateway-staging:
     - when: manual
 
 # Frontend - Static nginx serving HTML
-deploy-frontend-staging:
-  extends: .deploy-base
-  needs:
-    - job: build-frontend
-      optional: true
-  script:
-    - kubectl apply -f k8s/frontend/ -n meterstream
-    - kubectl -n meterstream set image deploy/frontend frontend="${IMAGE_BASE}/frontend:${TAG}"
-    - kubectl -n meterstream rollout status deploy/frontend --timeout=120s
-  rules:
-    - when: manual
+# deploy-frontend-staging:
+#   extends: .deploy-base
+#   needs:
+#     - job: build-frontend
+#       optional: true
+#   script:
+#     - kubectl apply -f k8s/frontend/ -n meterstream
+#     - kubectl -n meterstream set image deploy/frontend frontend="${IMAGE_BASE}/frontend:${TAG}"
+#     - kubectl -n meterstream rollout status deploy/frontend --timeout=120s
+#   rules:
+#     - when: manual
 
 # Ingress - Traefik routing (frontend + API gateway)
 deploy-ingress-staging:
@@ -848,84 +848,27 @@ deploy-ingress-prod:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
-# ==============================================================================
-# ANALYTICS INTEGRATION: Production deploy jobs for queries and portal services
-# ==============================================================================
-
-# Queries - Analytics data queries (depends on: InfluxDB)
-deploy-queries-prod:
-  extends: .deploy-base-prod
-  needs:
-    - job: build-queries
-      optional: true
-  script:
-    - require_statefulset influxdb
-
-    - kubectl apply -f k8s/queries/ -n meterstream
-
-    - |
-      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        IMAGE_TAG="${CI_COMMIT_TAG}"
-      else
-        IMAGE_TAG="${TAG}"
-      fi
-      kubectl -n meterstream set image deploy/queries queries="${IMAGE_BASE}/queries:${IMAGE_TAG}"
-
-    - kubectl -n meterstream rollout status deploy/queries --timeout=120s
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
-      when: manual
-
-# Portal - Frontend web application (depends on: Gateway)
-deploy-portal-prod:
-  extends: .deploy-base-prod
-  needs:
-    - job: build-portal
-      optional: true
-    - job: deploy-gateway-prod
-      optional: true
-  script:
-    - require_running gateway
-
-    - kubectl apply -f k8s/portal/ -n meterstream
-
-    - |
-      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        IMAGE_TAG="${CI_COMMIT_TAG}"
-      else
-        IMAGE_TAG="${TAG}"
-      fi
-      kubectl -n meterstream set image deploy/portal portal="${IMAGE_BASE}/portal:${IMAGE_TAG}"
-
-    - kubectl -n meterstream rollout status deploy/portal --timeout=120s
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
-      when: manual
-
 # Frontend - Static nginx serving HTML
-deploy-frontend-prod:
-  extends: .deploy-base-prod
-  needs:
-    - job: build-frontend
-      optional: true
-  script:
-    - kubectl apply -f k8s/frontend/ -n meterstream
+# deploy-frontend-prod:
+#   extends: .deploy-base-prod
+#   needs:
+#     - job: build-frontend
+#       optional: true
+#   script:
+#     - kubectl apply -f k8s/frontend/ -n meterstream
 
-    - |
-      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        IMAGE_TAG="${CI_COMMIT_TAG}"
-      else
-        IMAGE_TAG="${TAG}"
-      fi
-      kubectl -n meterstream set image deploy/frontend frontend="${IMAGE_BASE}/frontend:${IMAGE_TAG}"
+#     - |
+#       if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+#         IMAGE_TAG="${CI_COMMIT_TAG}"
+#       else
+#         IMAGE_TAG="${TAG}"
+#       fi
+#       kubectl -n meterstream set image deploy/frontend frontend="${IMAGE_BASE}/frontend:${IMAGE_TAG}"
 
-    - kubectl -n meterstream rollout status deploy/frontend --timeout=120s
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
-      when: manual
-<<<<<<< HEAD
-=======
+#     - kubectl -n meterstream rollout status deploy/frontend --timeout=120s
+#   rules:
+#     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+#       when: manual
 
 # Ingress - Traefik routing (frontend + API gateway)
 deploy-ingress-prod:
@@ -994,4 +937,3 @@ deploy-portal-prod:
 # ==============================================================================
 # END ANALYTICS INTEGRATION
 # ==============================================================================
->>>>>>> d456017 (ADD: build job for queries and portal)
