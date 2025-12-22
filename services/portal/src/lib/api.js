@@ -66,8 +66,9 @@ class ApiClient {
   }
 
   // Auth endpoints
+  // NOTE: Endpoints should NOT include /api prefix - it's added via baseUrl
   async login(email, password) {
-    const data = await this.request('/api/auth/login', {
+    const data = await this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
@@ -78,7 +79,7 @@ class ApiClient {
   }
 
   async register(email, password, name) {
-    return this.request('/api/auth/register', {
+    return this.request('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     })
