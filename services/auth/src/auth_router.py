@@ -336,28 +336,30 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
     """
     Get current user information from JWT token.
 
-    - Extracts JWT from Authorization header
+    - Extracts JWT from Authorization header OR cookie
     - Verifies token
     - Returns current user data
     """
-    # Check Authorization header exists
-    if not authorization:
+    token = None
+
+    # Try to get token from Authorization header first
+    if authorization:
+        # Extract token from "Bearer <token>"
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1]
+
+    # If no Authorization header, try to get token from cookie
+    if not token:
+        token = request.cookies.get("access_token")
+
+    # Check if we got a token from either source
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization header",
+            detail="Missing authentication credentials",
             headers={"WWW-Authenticate": "Bearer"}
         )
-
-    # Extract token from "Bearer <token>"
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Expected 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    token = parts[1]
 
     # Verify token
     payload = verify_token(token)
