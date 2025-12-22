@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     ingestion_service_url: str = "http://ingestion:8000"
     grafana_service_url: str = "http://grafana:3000"
 
+    # ==== ANALYTICS INTEGRATION: Queries service URL and dev/test toggles ====
+    queries_service_url: str = "http://queries:8000"
+    disable_auth_for_data: bool = False  # Set true to bypass JWT for /api/data/*
+    dev_customer_id: str = "demo-customer"  # Used if DISABLE_AUTH_FOR_DATA is true and no X-Customer-ID is provided
+    # ==== END ANALYTICS INTEGRATION ====
+
     log_level: str = "INFO"
 
 
