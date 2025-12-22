@@ -162,14 +162,30 @@ async def auth_proxy(request: Request, path: str):
     return await proxy_request(request, target_url)
 
 
-# Ingestion route - JWT validation required
+# Ingestion route - JWT validation required, restricted to device/admin/internal roles
+INGEST_ALLOWED_ROLES = {"device", "admin", "internal"}
+
+
 @app.api_route(
     "/api/ingest",
     methods=["POST"],
 )
 async def ingest_proxy(request: Request):
-    """Proxy requests to Ingestion Service with JWT validation."""
+    """Proxy requests to Ingestion Service with JWT validation and role check."""
     token_payload = await validate_jwt(request)
+
+    # Role-based access control - only device, admin, internal can ingest
+    if token_payload.role not in INGEST_ALLOWED_ROLES:
+        logger.warning(
+            "Ingest rejected for user %s with role %s",
+            token_payload.sub,
+            token_payload.role,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Ingestion requires device, admin, or internal role",
+        )
+
     target_url = f"{settings.ingestion_service_url}/ingest"
     logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)

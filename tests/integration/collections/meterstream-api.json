@@ -28,6 +28,10 @@
     {
       "key": "seeded_user_token",
       "value": ""
+    },
+    {
+      "key": "device_token",
+      "value": ""
     }
   ],
   "item": [
@@ -538,10 +542,51 @@
     },
     {
       "name": "5. Full Pipeline (Auth → Ingest → Query)",
-      "description": "Tests the complete data flow using a seeded user with customer_id",
+      "description": "Tests the complete data flow. Device user ingests data, customer queries it.",
       "item": [
         {
-          "name": "Login Seeded User (with customer_id)",
+          "name": "Login Device User (for ingestion)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{device_email}}\",\n  \"password\": \"{{device_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Device user login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Token has device role', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    pm.collectionVariables.set('device_token', jsonData.access_token);",
+                  "    ",
+                  "    // Decode JWT to verify role",
+                  "    var parts = jsonData.access_token.split('.');",
+                  "    var payload = JSON.parse(atob(parts[1]));",
+                  "    pm.expect(payload.role).to.eql('device');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Seeded User (for querying)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/auth/login",
@@ -569,10 +614,10 @@
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData).to.have.property('access_token');",
                   "    ",
-                  "    // Store token for pipeline tests",
+                  "    // Store token for query tests",
                   "    pm.collectionVariables.set('seeded_user_token', jsonData.access_token);",
                   "    ",
-                  "    // Decode JWT to verify customer_id (base64 decode middle part)",
+                  "    // Decode JWT to verify customer_id",
                   "    var parts = jsonData.access_token.split('.');",
                   "    var payload = JSON.parse(atob(parts[1]));",
                   "    pm.expect(payload).to.have.property('customer_id');",
@@ -585,7 +630,7 @@
           ]
         },
         {
-          "name": "Ingest Data for Seeded Customer",
+          "name": "Customer Cannot Ingest (should fail with 403)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/ingest",
@@ -601,6 +646,45 @@
             ],
             "body": {
               "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T08:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Customer role returns 403 for ingest', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Error message mentions required roles', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.detail).to.include('device');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest Data (with device role)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{device_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
               "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T08:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"2025-01-15T09:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"2025-01-15T10:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
             }
           },
@@ -609,7 +693,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Ingest for seeded customer successful', function () {",
+                  "pm.test('Device ingest successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
