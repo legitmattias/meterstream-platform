@@ -1,3 +1,4 @@
+ /* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useEffect, useContext } from 'react'
 import { api } from '../lib/api'
 
@@ -17,7 +18,7 @@ export function AuthProvider({ children }) {
           customerId: userData.customer_id,
         })
       } catch (error) {
-        console.log('No active session')
+        console.log('No active session', error)
       }
       setLoading(false)
     }

@@ -17,6 +17,8 @@ from .influx import (
     query_summary,
     query_total_and_average,
     query_weekly_days,
+    query_top_consumers,
+    query_quality_metrics,
 )
 from .models import (
     ConsumptionDataPoint,
@@ -27,6 +29,9 @@ from .models import (
     MonthlyDayData,
     SummaryResponse,
     WeeklyDayData,
+    DataQuality,
+    TopConsumersResponse,
+    LogsResponse,
 )
 
 logging.basicConfig(
@@ -173,11 +178,10 @@ async def get_dashboard(
     Returns:
         Combined weekly, monthly, hourly data and summary statistics
     """
-    # If no customer ID, use default for testing
-    customer_id = x_customer_id or "test-customer"
-    
+    # Require X-Customer-ID for data endpoints to ensure customer isolation
     if not x_customer_id:
-        logger.warning("No X-Customer-ID header provided, using default customer ID for testing")
+        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
+    customer_id = x_customer_id
 
     try:
         client = get_influx_client()
@@ -216,4 +220,62 @@ async def get_dashboard(
 
     except Exception as e:
         logger.error("Failed to query dashboard for %s: %s", customer_id, e)
+        raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+@app.get("/api/data/quality", response_model=DataQuality)
+async def get_quality(
+    x_customer_id: Annotated[str | None, Header()] = None,
+    period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
+):
+    """Stub endpoint for data quality metrics. Returns placeholders until implemented."""
+    if not x_customer_id:
+        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
+    try:
+        client = get_influx_client()
+        query_api = client.query_api()
+        metrics = query_quality_metrics(query_api, x_customer_id, period)
+        return DataQuality(
+            completeness=metrics.get("completeness"),
+            accuracy=metrics.get("accuracy"),
+            timeliness=metrics.get("timeliness"),
+        )
+    except Exception as e:
+        logger.error("Failed to fetch data quality for %s: %s", x_customer_id, e)
+        raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+@app.get("/api/data/top-consumers", response_model=TopConsumersResponse)
+async def get_top_consumers(
+    x_customer_id: Annotated[str | None, Header()] = None,
+    limit: int = Query(5, ge=1, le=50),
+):
+    """Stub endpoint returning an empty top-consumers list."""
+    if not x_customer_id:
+        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
+    try:
+        client = get_influx_client()
+        query_api = client.query_api()
+        consumers = query_top_consumers(query_api, limit=limit)
+        return TopConsumersResponse(customer_id=x_customer_id, consumers=[
+            # Map results to ConsumerData-like dicts (name, consumption)
+            {"name": c.get("name"), "consumption": c.get("consumption")} for c in consumers
+        ])
+    except Exception as e:
+        logger.error("Failed to fetch top consumers for %s: %s", x_customer_id, e)
+        raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+@app.get("/api/data/logs", response_model=LogsResponse)
+async def get_logs(
+    x_customer_id: Annotated[str | None, Header()] = None,
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Stub endpoint returning an empty logs array."""
+    if not x_customer_id:
+        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
+    try:
+        return LogsResponse(customer_id=x_customer_id, logs=[])
+    except Exception as e:
+        logger.error("Failed to fetch logs for %s: %s", x_customer_id, e)
         raise HTTPException(status_code=500, detail="Failed to query data") from e
