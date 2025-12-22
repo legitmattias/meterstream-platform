@@ -1,76 +1,76 @@
-import { useState, useEffect } from 'react'
-import { api } from '../lib/api'
+// /**DEPROICATEDE USE authcontext insted */
 
-/**
- * Manage authentication state (login/logout/isAuthenticated) and store the token in sessionStorage.
- * Decodes JWT locally only to surface email/role/customerId for the UI; backend still validates tokens.
- */
-function decodeJwt(token) {
-  try {
-    const payload = token.split('.')[1]
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=')
-    const json = atob(normalized)
-    return JSON.parse(json)
-  } catch (err) {
-    console.error('Failed to decode JWT', err)
-    return null
-  }
-}
+// import { useState, useEffect } from 'react'
+// import { api } from '../lib/api'
 
-export function useAuth() {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+// /**
+//  * Manage authentication state using HttpOnly cookies.
+//  * JWT is stored securely in cookies and managed by the backend.
+//  */
 
-  useEffect(() => {
-    const initAuth = async () => {
-      const access_token = sessionStorage.getItem('access_token')
-      if (access_token) {
-        api.setToken(access_token)
-        const payload = decodeJwt(access_token)
-        setUser({
-          email: payload?.email,
-          role: payload?.role,
-          customerId: payload?.customer_id,
-          access_token,
-        })
-      }
-      setLoading(false)
-    }
+// export function useAuth() {
+//   const [user, setUser] = useState(null)
+//   const [loading, setLoading] = useState(true)
 
-    initAuth()
-  }, [])
+//   useEffect(() => {
+//     const initAuth = async () => {
+//       // Try to get user info from backend (will use cookie automatically)
+//       try {
+//         const userData = await api.request('/auth/me')
+//         setUser({
+//           email: userData.email,
+//           role: userData.role,
+//           customerId: userData.customer_id,
+//         })
+//       } catch (error) {
+//         // No valid session, user needs to login
+//         console.log('No active session')
+//       }
+//       setLoading(false)
+//     }
 
-  const login = async (email, password) => {
-    const data = await api.login(email, password)
-    sessionStorage.setItem('access_token', data.access_token)
-    api.setToken(data.access_token)
-    const payload = decodeJwt(data.access_token)
-    setUser({
-      email: payload?.email ?? email,
-      role: payload?.role,
-      customerId: payload?.customer_id,
-      access_token: data.access_token,
-    })
-    return data
-  }
+//     initAuth()
+//   }, [])
 
-  const logout = () => {
-    api.clearToken()
-    sessionStorage.removeItem('access_token')
-    setUser(null)
-    // Redirect to login page
-    window.location.href = '/login'
-  }
+//   const login = async (email, password) => {
+//     await api.login(email, password)
+//     // Cookie is set automatically by backend
+//     // User info will be fetched by initAuth on next render
+//     // Force re-check authentication state
+//     const userData = await api.request('/auth/me')
+//     setUser({
+//       email: userData.email,
+//       role: userData.role,
+//       customerId: userData.customer_id,
+//     })
+//     setLoading(false)
+//   }
 
-  const isAuthenticated = () => {
-    return !!user
-  }
+//   const logout = async () => {
+//     try {
+//       // Call backend to clear cookie
+//       await api.request('/auth/logout', { method: 'POST' })
+//     } catch (error) {
+//       console.error('Logout request failed:', error)
+//       // Continue with logout even if request fails
+//     }
 
-  return {
-    user,
-    loading,
-    login,
-    logout,
-    isAuthenticated,
-  }
-}
+//     // Clear local state
+//     setUser(null)
+
+//     // Redirect to login page
+//     window.location.href = '/login'
+//   }
+
+//   const isAuthenticated = () => {
+//     return !!user
+//   }
+
+//   return {
+//     user,
+//     loading,
+//     login,
+//     logout,
+//     isAuthenticated,
+//   }
+// }

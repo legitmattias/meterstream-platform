@@ -55,6 +55,9 @@ def decode_token(token: str) -> TokenPayload:
         logger.warning("Invalid JWT token: %s", e)
         raise HTTPException(status_code=401, detail="Invalid token") from e
 
+def extract_token_from_cookie(request: Request) -> str | None:
+    """Extract JWT token from cookie."""
+    return request.cookies.get("access_token")
 
 def extract_token_from_header(request: Request) -> str:
     """
@@ -83,15 +86,30 @@ def extract_token_from_header(request: Request) -> str:
     return parts[1]
 
 
+# async def validate_jwt(request: Request) -> TokenPayload:
+#     """
+#     Validate JWT token from request and return payload.
+
+#     Args:
+#         request: FastAPI request object
+
+#     Returns:
+#         TokenPayload with decoded claims
+#     """
+#     token = extract_token_from_header(request)
+#     return decode_token(token)
 async def validate_jwt(request: Request) -> TokenPayload:
-    """
-    Validate JWT token from request and return payload.
+    """Validate JWT from header OR cookie."""
+    # Try header first
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        token = extract_token_from_header(request)
+        return decode_token(token)
+    
+    # Fall back to cookie
+    token = extract_token_from_cookie(request)
+    if token:
+        return decode_token(token)
+    
+    raise HTTPException(status_code=401, detail="Missing authentication")
 
-    Args:
-        request: FastAPI request object
-
-    Returns:
-        TokenPayload with decoded claims
-    """
-    token = extract_token_from_header(request)
-    return decode_token(token)

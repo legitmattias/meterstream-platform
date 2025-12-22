@@ -52,10 +52,15 @@ app = FastAPI(
 )
 
 # Global CORS middleware so all responses (incl. 404/500) carry headers
+# NOTE: allow_credentials=True requires specific origins (cannot use "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:5173",      # Local dev
+        "http://194.47.170.217",      # Staging
+        "http://localhost:3000",      # Alternative dev port
+    ],
+    allow_credentials=True,           # Required for cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
