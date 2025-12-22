@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../contexts/AuthContext'
 import './Register.css'
 
 export function Register() {
@@ -9,8 +9,15 @@ export function Register() {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const { login, isAuthenticated, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (!authLoading && isAuthenticated()) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [authLoading, isAuthenticated, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -20,7 +27,7 @@ export function Register() {
     try {
       // Register first
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/register`,
+        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/auth/register`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

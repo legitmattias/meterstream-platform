@@ -5,7 +5,7 @@ metadata:
   labels:
     app: portal
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: portal
@@ -14,16 +14,13 @@ spec:
       labels:
         app: portal
     spec:
+      imagePullSecrets:
+        - name: gitlab-registry
       containers:
       - name: portal
-        image: portal:latest
+        image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/portal:latest
         ports:
         - containerPort: 80
-        env:
-        - name: VITE_API_BASE_URL
-          value: "http://gateway.meterstream.svc.cluster.local:8080"
-        - name: VITE_GRAFANA_URL
-          value: "http://grafana.meterstream.svc.cluster.local:3000"
         livenessProbe:
           httpGet:
             path: /health

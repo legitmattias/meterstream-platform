@@ -21,11 +21,16 @@ spec:
       labels:
         app: queries
     spec:
+      terminationGracePeriodSeconds: 60
       imagePullSecrets:
         - name: gitlab-registry
       containers:
         - name: queries
           image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/queries:latest
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
           ports:
             - containerPort: 8000
               name: http

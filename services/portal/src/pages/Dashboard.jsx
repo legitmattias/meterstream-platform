@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../contexts/AuthContext'
 import { config } from '../config'
 import { api } from '../lib/api'
 import { MonthBarChart } from '../components/MonthBarChart'
@@ -51,16 +51,11 @@ export function Dashboard() {
           setQuality({
             completeness: data.completeness,
             accuracy: data.accuracy,
-            timeliness: data.timeliness,
-          })
-        })
-        .catch(err => {
-          console.error('Failed to fetch data quality', err)
-          setQuality({ completeness: null, accuracy: null, timeliness: null })
-        })
-    }
-  }, [activeTab])
-
+            if (selectedDay) {
+              const date = getMostRecentDateForDayLabel(selectedDay)
+              if (date) params.set('date', date)
+            }
+            
   // Fetch top consumers and logs when analytics tab is active
   useEffect(() => {
     if (activeTab === 'analytics') {
@@ -96,7 +91,10 @@ export function Dashboard() {
           const date = getMostRecentDateForDayLabel(selectedDay)
           if (date) params.set('date', date)
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/development
         const data = await api.request(`/data/dashboard?${params.toString()}`)
 
         const weekly = (data.weekly_days || []).map(d => ({ label: d.day, value: d.consumption || 0 }))
