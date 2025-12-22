@@ -71,7 +71,7 @@ export function Dashboard() {
           const date = getMostRecentDateForDayLabel(selectedDay)
           if (date) params.set('date', date)
         }
-        const data = await api.request(`/api/data/dashboard?${params.toString()}`)
+        const data = await api.request(`/data/dashboard?${params.toString()}`)
 
         const weekly = (data.weekly_days || []).map(d => ({ label: d.day, value: d.consumption || 0 }))
         const weeklyOrdered = DOW.map(day => weekly.find(w => w.label === day) || { label: day, value: 0 })

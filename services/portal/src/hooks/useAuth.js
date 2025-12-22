@@ -58,6 +58,8 @@ export function useAuth() {
     api.clearToken()
     sessionStorage.removeItem('access_token')
     setUser(null)
+    // Redirect to login page
+    window.location.href = '/login'
   }
 
   const isAuthenticated = () => {

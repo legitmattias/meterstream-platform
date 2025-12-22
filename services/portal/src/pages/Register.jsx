@@ -20,7 +20,7 @@ export function Register() {
     try {
       // Register first
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/register`,
+        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/auth/register`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

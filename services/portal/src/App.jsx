@@ -21,18 +21,18 @@ function App() {
         <Route
           path="/dashboard"
           element={
-          //  <ProtectedRoute>
+            <ProtectedRoute>
               <Landing />
-          //  </ProtectedRoute>
+            </ProtectedRoute>
           }
         />
         {/* Analytics */}
         <Route
           path="/analytics"
           element={
-          //  <ProtectedRoute>
+            <ProtectedRoute>
               <Dashboard />
-         //   </ProtectedRoute>
+            </ProtectedRoute>
           }
         />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
