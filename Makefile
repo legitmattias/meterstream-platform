@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token peek-kafka extract-data clean integration-test load-interactive load-smoke load-normal load-stress load-spike
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run producer-staging generate-token peek-kafka extract-data clean integration-test load-interactive load-smoke load-normal load-stress load-spike
 
 help:
 	@echo "MeterStream Development Commands"
@@ -33,7 +33,8 @@ help:
 	@echo "  make gateway-lint    Run linter on gateway"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make producer-run      Run the test data producer"
+	@echo "  make producer-run      Run test data producer locally (100 readings)"
+	@echo "  make producer-staging  Load large dataset to staging (with checkpoint)"
 	@echo "  make generate-token    Generate a test JWT token"
 	@echo "  make peek-kafka        Peek at Kalmar Energi Team 1's Kafka stream"
 	@echo ""
@@ -131,6 +132,10 @@ gateway-lint:
 producer-run:
 	cd scripts && \
 	python3 produce_test_data.py --url http://localhost:8000 --limit 100
+
+producer-staging:
+	cd scripts && \
+	python3 produce_test_data.py --url http://194.47.170.217 --file ../data/test_data_large.csv --batch-size 200 --rate 0
 
 # Generate test JWT token
 generate-token:
