@@ -16,11 +16,11 @@ FastAPI service for user authentication with JWT tokens and MongoDB storage.
 ### Admin User Management Endpoints
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/auth/users` | List all users (paginated) | Admin only |
-| GET | `/auth/users/{user_id}` | Get specific user by ID | Admin only |
-| POST | `/auth/users` | Create user with role & customer_id | Admin only |
-| PUT | `/auth/users/{user_id}` | Update user (all fields optional) | Admin only |
-| DELETE | `/auth/users/{user_id}` | Delete user | Admin only |
+| GET | `/auth/users` | List all users (paginated) | Admin only (header or cookie) |
+| GET | `/auth/users/{user_id}` | Get specific user by ID | Admin only (header or cookie) |
+| POST | `/auth/users` | Create user with role & customer_id | Admin only (header or cookie) |
+| PUT | `/auth/users/{user_id}` | Update user (all fields optional) | Admin only (header or cookie) |
+| DELETE | `/auth/users/{user_id}` | Delete user | Admin only (header or cookie) |
 
 ### Health Check Endpoints
 | Method | Endpoint | Description | Auth Required |
@@ -50,7 +50,11 @@ FastAPI service for user authentication with JWT tokens and MongoDB storage.
 
 ## Admin User Management Examples
 
-All admin endpoints require `Authorization: Bearer <token>` header with admin role.
+All admin endpoints require admin authentication via:
+- **Authorization header**: `Authorization: Bearer <token>`, OR
+- **Cookie**: Automatically sent after login (HttpOnly cookie)
+
+**Note**: Cookie authentication is recommended for web apps (more secure, automatic).
 
 ### List Users (with pagination)
 ```bash

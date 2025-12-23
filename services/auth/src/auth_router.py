@@ -26,6 +26,7 @@ from .jwt_service import (
 )
 from .mongodb import get_users_collection
 from .auth_helpers import (
+    extract_token,
     verify_admin_access,
     get_client_info,
     get_user_by_id,
@@ -271,20 +272,9 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
     - Verifies token
     - Returns current user data
     """
-    token = None
+    # Extract token from header or cookie (uses helper)
+    token = extract_token(authorization, request)
 
-    # Try to get token from Authorization header first
-    if authorization:
-        # Extract token from "Bearer <token>"
-        parts = authorization.split()
-        if len(parts) == 2 and parts[0].lower() == "bearer":
-            token = parts[1]
-
-    # If no Authorization header, try to get token from cookie
-    if not token:
-        token = request.cookies.get("access_token")
-
-    # Check if we got a token from either source
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

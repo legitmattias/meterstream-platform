@@ -1,6 +1,7 @@
 """Helper functions for authentication router.
 
 This module contains reusable helper functions for:
+- Token extraction from headers and cookies
 - Admin access verification
 - User retrieval and validation
 - Token pair creation
@@ -19,16 +20,45 @@ from .models import TokenPairResponse
 logger = logging.getLogger(__name__)
 
 
+def extract_token(authorization: Optional[str], request: Request) -> Optional[str]:
+    """
+    Extract JWT token from Authorization header or cookie.
+
+    Tries Authorization header first, then falls back to cookie.
+    This allows both header-based and cookie-based authentication.
+
+    Args:
+        authorization: Authorization header value (format: "Bearer <token>")
+        request: FastAPI request object (for cookie access)
+
+    Returns:
+        str: JWT token if found, None otherwise
+    """
+    token = None
+
+    # Try Authorization header first
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1]
+
+    # If no header token, try cookie
+    if not token:
+        token = request.cookies.get("access_token")
+
+    return token
+
+
 async def verify_admin_access(authorization: Optional[str], request: Request) -> dict:
     """
     Verify that request has valid admin authorization.
 
-    Extracts and verifies JWT token from Authorization header,
+    Extracts and verifies JWT token from Authorization header or cookie,
     then checks that user has admin role.
 
     Args:
         authorization: Authorization header value (format: "Bearer <token>")
-        request: FastAPI request object for logging
+        request: FastAPI request object for logging and cookie access
 
     Returns:
         dict: Token payload if valid admin
@@ -36,24 +66,15 @@ async def verify_admin_access(authorization: Optional[str], request: Request) ->
     Raises:
         HTTPException: If unauthorized or not admin
     """
-    # Check Authorization header exists
-    if not authorization:
+    # Extract token from header or cookie
+    token = extract_token(authorization, request)
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization header",
+            detail="Missing authentication credentials",
             headers={"WWW-Authenticate": "Bearer"}
         )
-
-    # Extract token from "Bearer <token>"
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Expected 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    token = parts[1]
 
     # Verify token
     payload = verify_token(token)
