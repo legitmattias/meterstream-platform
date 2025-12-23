@@ -67,6 +67,9 @@ npm-debug.log*
 
 # Lock files (scripts are dev utilities, not production)
 scripts/package-lock.json
+
+# Test data producer checkpoint file
+scripts/.produce_checkpoint
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
