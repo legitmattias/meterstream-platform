@@ -8,7 +8,7 @@ Authenticates as data-loader user and sends readings in batches at a configurabl
 Features:
 - Checkpoint support: saves progress after each batch, auto-resumes on restart
 - Configurable batch size and rate limiting
-- Authentication via JWT
+- Authentication via JWT with automatic token refresh on expiration
 
 Usage:
     # Against staging (uses default data-loader credentials)
@@ -77,8 +77,13 @@ def load_readings(file_path: Path) -> list[dict]:
     return readings
 
 
-def send_batch(url: str, readings: list[dict], token: str | None = None) -> bool:
-    """Send a batch of readings to the ingestion service."""
+def send_batch(url: str, readings: list[dict], token: str | None = None) -> tuple[bool, bool]:
+    """Send a batch of readings to the ingestion service.
+
+    Returns:
+        tuple: (success, token_expired) - success indicates if batch was sent,
+               token_expired indicates if re-authentication is needed.
+    """
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -93,12 +98,15 @@ def send_batch(url: str, readings: list[dict], token: str | None = None) -> bool
         if response.status_code == 200:
             data = response.json()
             print(f"Sent {data['accepted']} readings")
-            return True
+            return True, False
+        if response.status_code == 401:
+            print("Token expired, refreshing...")
+            return False, True
         print(f"Error: {response.status_code} - {response.text}")
-        return False
+        return False, False
     except requests.RequestException as e:
         print(f"Request failed: {e}")
-        return False
+        return False, False
 
 
 def load_checkpoint(checkpoint_file: Path) -> int:
@@ -264,7 +272,18 @@ Checkpoint:
     try:
         for i in range(0, len(readings), args.batch_size):
             batch = readings[i : i + args.batch_size]
-            if send_batch(ingest_url, batch, token):
+            success, token_expired = send_batch(ingest_url, batch, token)
+
+            # Handle token expiration - refresh and retry
+            if token_expired and not args.no_auth:
+                token = login(args.url, args.email, DEFAULT_PASSWORD)
+                if not token:
+                    print("Failed to refresh token. Exiting.")
+                    break
+                print("Token refreshed, retrying batch...")
+                success, token_expired = send_batch(ingest_url, batch, token)
+
+            if success:
                 session_sent += len(batch)
                 total_sent += len(batch)
                 batches += 1
