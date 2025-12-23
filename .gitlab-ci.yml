@@ -564,7 +564,9 @@ deploy-portal-staging:
 
 newman-integration-test:
   stage: integration-test
-  image: postman/newman:alpine
+  image:
+    name: postman/newman:alpine
+    entrypoint: [""]
   script:
     # Run Newman with the MeterStream API collection against staging environment
     - |
