@@ -18,6 +18,28 @@ tests/
 
 ## Integration Tests (Newman)
 
+### CI/CD Pipeline Integration
+
+Integration tests run **automatically in the CI/CD pipeline** after staging deployment:
+
+**Pipeline Stage Order:**
+1. `test` - Unit tests
+2. `build` - Docker images
+3. `deploy-staging` - Deploy to staging
+4. **`integration-test`** ← Newman tests run here (manual trigger)
+5. `deploy-prod` - Production deployment
+
+The `newman-integration-test` job:
+- Runs after all core services are deployed to staging
+- Uses `postman/newman:alpine` Docker image
+- Generates JUnit test reports in GitLab
+- **Fails the pipeline** if any test fails
+- Must be manually triggered
+
+**Note:** Load tests remain manual and are NOT included in the pipeline.
+
+### Running Locally
+
 ```bash
 # Install
 npm install -g newman
