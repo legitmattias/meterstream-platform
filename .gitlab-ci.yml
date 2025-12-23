@@ -8,11 +8,12 @@
 #   - main → Production environment (via git tags)
 #
 # Stages:
-#   1. test-connection - Verify kubectl connectivity
-#   2. Test            - Run tests for each service
-#   3. build           - Build Docker images with Kaniko
-#   4. deploy-staging  - Deploy to staging (manual)
-#   5. deploy-prod     - Deploy to production (git tags only)
+#   1. test-connection  - Verify kubectl connectivity
+#   2. Test             - Run tests for each service
+#   3. build            - Build Docker images with Kaniko
+#   4. deploy-staging   - Deploy to staging (manual)
+#   5. integration-test - Run Newman API tests against staging
+#   6. deploy-prod      - Deploy to production (git tags only)
 # ==============================================================================
 
 stages:
@@ -20,6 +21,7 @@ stages:
   - test
   - build
   - deploy-staging
+  - integration-test
   - deploy-prod
 
 # ------------------------------------------------------------------------------
@@ -46,18 +48,18 @@ test-staging-connection:
   rules:
     - when: manual
 
-# test-prod-connection:
-#   stage: test-connection
-#   image:
-#     name: bitnami/kubectl:latest
-#     entrypoint: [""]
-#   script:
-#     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
-#     - export KUBECONFIG=$PWD/kubeconfig
-#     - kubectl config current-context
-#     - kubectl get nodes
-#   rules:
-#     - when: manual
+test-prod-connection:
+  stage: test-connection
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  script:
+    - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG=$PWD/kubeconfig
+    - kubectl config current-context
+    - kubectl get nodes
+  rules:
+    - when: manual
 
 # ==============================================================================
 # TEST STAGE - Run unit tests before building
@@ -193,10 +195,6 @@ build-gateway:
     SERVICE_NAME: gateway
 
 
-# ==============================================================================
-# ANALYTICS INTEGRATION: Build jobs for queries and portal services
-# ==============================================================================
-
 build-queries:
   extends: .build
   variables:
@@ -247,10 +245,6 @@ build-portal:
     - when: manual
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: always
-
-# ==============================================================================
-# END ANALYTICS INTEGRATION
-# ==============================================================================
 
 # ==============================================================================
 # DEPLOY STAGING
@@ -520,10 +514,6 @@ deploy-grafana-staging:
   rules:
     - when: manual
 
-# ==============================================================================
-# ANALYTICS INTEGRATION: Staging deploy jobs for queries and portal services
-# ==============================================================================
-
 # Queries - Analytics data queries (depends on: InfluxDB)
 deploy-queries-staging:
   extends: .deploy-base
@@ -569,13 +559,52 @@ deploy-portal-staging:
     - when: manual
 
 # ==============================================================================
-# END ANALYTICS INTEGRATION
+# INTEGRATION TESTS - Run Newman API tests against staging
 # ==============================================================================
+
+newman-integration-test:
+  stage: integration-test
+  image: postman/newman:alpine
+  script:
+    # Run Newman with the MeterStream API collection against staging environment
+    - newman run tests/integration/collections/meterstream-api.json
+        --environment tests/integration/environments/staging.json
+        --env-var "admin_password=$STAG_BOOTSTRAP_ADMIN_PASSWORD"
+        --reporters cli,junit
+        --reporter-junit-export newman-results.xml
+        --color on
+        --disable-unicode
+        --bail
+  artifacts:
+    when: always
+    reports:
+      junit: newman-results.xml
+    paths:
+      - newman-results.xml
+    expire_in: 1 week
+  rules:
+    # Only run after staging deployment completes
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
+      when: manual
+  # Depends on all core staging services being deployed
+  needs:
+    - job: deploy-gateway-staging
+      optional: true
+    - job: deploy-auth-staging
+      optional: true
+    - job: deploy-ingestion-staging
+      optional: true
+    - job: deploy-processor-staging
+      optional: true
+    - job: deploy-queries-staging
+      optional: true
+  allow_failure: false
 
 
 # ==============================================================================
 # DEPLOY PRODUCTION
-# if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/' Pipeline jobb Kommer bara visas ifall det finns en git tag som machar regex. ==============================================================================
+# if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/' Pipeline jobb Kommer bara visas ifall det finns en git tag som machar regex. 
+# ==============================================================================
 
 .deploy-base-prod:
   stage: deploy-prod
@@ -729,7 +758,7 @@ deploy-auth-prod:
     - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
 
     # Enable test data seeding with production password
-    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
+    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=false # false for prod
     - kubectl -n meterstream set env deploy/auth TEST_USER_PASSWORD="$TEST_USER_PASSWORD"
 
     - |
@@ -842,9 +871,6 @@ deploy-ingress-prod:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
-# ==============================================================================
-# ANALYTICS INTEGRATION: Production deploy jobs for queries and portal services
-# ==============================================================================
 
 # Queries - Analytics data queries (depends on: InfluxDB)
 deploy-queries-prod:
@@ -896,6 +922,3 @@ deploy-portal-prod:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
-# ==============================================================================
-# END ANALYTICS INTEGRATION
-# ==============================================================================
