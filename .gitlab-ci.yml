@@ -48,18 +48,18 @@ test-staging-connection:
   rules:
     - when: manual
 
-test-prod-connection:
-  stage: test-connection
-  image:
-    name: bitnami/kubectl:latest
-    entrypoint: [""]
-  script:
-    - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
-    - export KUBECONFIG=$PWD/kubeconfig
-    - kubectl config current-context
-    - kubectl get nodes
-  rules:
-    - when: manual
+# test-prod-connection:
+#   stage: test-connection
+#   image:
+#     name: bitnami/kubectl:latest
+#     entrypoint: [""]
+#   script:
+#     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+#     - export KUBECONFIG=$PWD/kubeconfig
+#     - kubectl config current-context
+#     - kubectl get nodes
+#   rules:
+#     - when: manual
 
 # ==============================================================================
 # TEST STAGE - Run unit tests before building
