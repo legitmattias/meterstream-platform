@@ -72,9 +72,32 @@ class HealthResponse(BaseModel):
     service: str = "auth"
 
 
+# ============================================================================
+# ADMIN USER MANAGEMENT MODELS
+# ============================================================================
 
-# class TokenResponse(BaseModel):
-#     """Model for single access token response (deprecated - use TokenPairResponse)"""
-#     access_token: str
-#     token_type: str = "bearer"
-#     expires_in: int
+class AdminUserCreate(BaseModel):
+    """Model for admin creating a new user (bypasses normal registration)"""
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    name: str = Field(..., min_length=2)
+    role: str = Field(default="customer", pattern="^(customer|admin|internal|device)$")
+    customer_id: Optional[str] = None
+
+
+class AdminUserUpdate(BaseModel):
+    """Model for admin updating user fields (all fields optional)"""
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8)
+    name: Optional[str] = Field(None, min_length=2)
+    role: Optional[str] = Field(None, pattern="^(customer|admin|internal|device)$")
+    customer_id: Optional[str] = None
+
+
+class UserListResponse(BaseModel):
+    """Model for paginated user list response"""
+    users: list[UserResponse]
+    total: int
+    page: int
+    page_size: int
+

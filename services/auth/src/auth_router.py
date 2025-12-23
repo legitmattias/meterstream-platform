@@ -13,17 +13,24 @@ from .models import (
     UserResponse,
     VerifyResponse,
     RefreshTokenRequest,
-    TokenPairResponse
+    TokenPairResponse,
+    AdminUserCreate,
+    AdminUserUpdate,
+    UserListResponse
 )
 from .jwt_service import (
     hash_password,
     verify_password,
-    create_access_token,
-    create_refresh_token,
     verify_token,
     verify_refresh_token
 )
 from .mongodb import get_users_collection
+from .auth_helpers import (
+    verify_admin_access,
+    get_client_info,
+    get_user_by_id,
+    create_token_pair
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -42,6 +49,10 @@ limiter = Limiter(key_func=get_remote_address)
 async def register(request: Request, response: Response, user_data: UserRegister, users=Depends(get_users_collection)):
     """
     Register a new user.
+
+    DEPRECATED: This endpoint will be deprecated in favor of admin-created users.
+    Self-registration creates users without proper customer_id assignment.
+    Use POST /auth/users (admin only) for creating users with correct customer_id.
 
     - Checks if email already exists
     - Hashes password
@@ -250,86 +261,6 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
 
     return tokens
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit("10/minute")
-async def delete_user(
-    request: Request,
-    user_id: str,
-    authorization: Optional[str] = Header(None),
-    users=Depends(get_users_collection)
-):
-    """
-    Delete a user by ID. Admin only.
-    """
-    # Check Authorization header exists
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization header",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    # Extract token from "Bearer <token>"
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Expected 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    token = parts[1]
-
-    # Verify token
-    payload = verify_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    # Check admin role
-    if payload.get("role") != "admin":
-        logger.warning(
-            "Non-admin attempted to delete user",
-            extra={"requester_id": payload.get("user_id"), "target_id": user_id, **get_client_info(request)}
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-
-    # Validate user ID format
-    if not user_id or len(user_id) != 24 or not all(c in '0123456789abcdefABCDEF' for c in user_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user ID format"
-        )
-
-    # Delete user
-    try:
-        result = await users.delete_one({"_id": ObjectId(user_id)})
-    except InvalidId:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user ID format"
-        )
-
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-
-    logger.info(
-        "User deleted",
-        extra={"deleted_user_id": user_id, "admin_id": payload.get("user_id"), **get_client_info(request)}
-    )
-
-    return None
-
-
 @router.get("/me", response_model=UserResponse)
 @limiter.limit("30/minute")  # Max 30 requests per minute per IP
 async def me(request: Request, authorization: Optional[str] = Header(None), users=Depends(get_users_collection)):
@@ -401,84 +332,310 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
     )
 
 
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
+#===========================================================================
+# ADMIN USER MANAGEMENT ENDPOINTS
+#===========================================================================
 
-def get_client_info(request: Request) -> dict:
-    """Extract client IP and user agent from request for logging."""
-    return {
-        "ip": request.client.host if request.client else "unknown",
-        "user_agent": request.headers.get("user-agent", "unknown")
+@router.get("/users", response_model=UserListResponse)
+@limiter.limit("30/minute")
+async def list_users(
+    request: Request,
+    page: int = 1,
+    page_size: int = 50,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection)
+):
+    """
+    List all users with pagination. Admin only.
+
+    Query params:
+    - page: Page number (default: 1)
+    - page_size: Users per page (default: 50, max: 100)
+    """
+    # Verify admin access
+    await verify_admin_access(authorization, request)
+
+    # Validate pagination params
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    skip = (page - 1) * page_size
+
+    # Get total count and users
+    total = await users.count_documents({})
+    user_docs = await users.find().skip(skip).limit(page_size).to_list(length=page_size)
+
+    # Convert to response format
+    user_responses = [
+        UserResponse(
+            id=str(user["_id"]),
+            email=user["email"],
+            name=user["name"],
+            created_at=user["created_at"],
+            role=user.get("role", "customer"),
+            customer_id=user.get("customer_id")
+        )
+        for user in user_docs
+    ]
+
+    logger.info(
+        "Users listed",
+        extra={"page": page, "page_size": page_size, "total": total, **get_client_info(request)}
+    )
+
+    return UserListResponse(
+        users=user_responses,
+        total=total,
+        page=page,
+        page_size=page_size
+    )
+
+
+@router.get("/users/{user_id}", response_model=UserResponse)
+@limiter.limit("30/minute")
+async def get_user(
+    request: Request,
+    user_id: str,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection)
+):
+    """
+    Get a specific user by ID. Admin only.
+    """
+    # Verify admin access
+    await verify_admin_access(authorization, request)
+
+    # Get user with validation (reuses existing helper)
+    user = await get_user_by_id(user_id, users, request)
+
+    logger.info(
+        "User retrieved by admin",
+        extra={"target_user_id": user_id, **get_client_info(request)}
+    )
+
+    return UserResponse(
+        id=str(user["_id"]),
+        email=user["email"],
+        name=user["name"],
+        created_at=user["created_at"],
+        role=user.get("role", "customer"),
+        customer_id=user.get("customer_id")
+    )
+
+
+@router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+async def create_user_as_admin(
+    request: Request,
+    user_data: AdminUserCreate,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection)
+):
+    """
+    Create a new user as admin (bypass normal registration).
+
+    Allows setting:
+    - Custom role (customer, admin, internal, device)
+    - customer_id assignment
+    """
+    # Verify admin access
+    admin_payload = await verify_admin_access(authorization, request)
+
+    # Check if user already exists
+    existing_user = await users.find_one({"email": user_data.email})
+    if existing_user:
+        logger.warning(
+            "Admin tried to create duplicate user",
+            extra={"email": user_data.email, "admin_id": admin_payload.get("user_id"), **get_client_info(request)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+
+    # Create user document
+    user_doc = {
+        "email": user_data.email,
+        "hashed_password": hash_password(user_data.password),
+        "name": user_data.name,
+        "role": user_data.role,
+        "customer_id": user_data.customer_id,
+        "created_at": datetime.now(UTC)
     }
 
-
-async def get_user_by_id(user_id: str, users, request: Request) -> dict:
-    """
-    Get user from database by ID with validation and error handling.
-
-    Validates ObjectId format, handles database errors, and logs security events.
-    Returns user document or raises HTTPException.
-    """
-    # SECURITY: Validate ObjectId format before database query
-    # Check if string is 24 hex characters (valid MongoDB ObjectId format)
-    if not user_id or len(user_id) != 24 or not all(c in '0123456789abcdefABCDEF' for c in user_id):
-        logger.warning(
-            "Invalid ObjectId format",
-            extra={"user_id": user_id, **get_client_info(request)}
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-
-    # Get user from database with exception handling
+    # Insert into database
     try:
-        user = await users.find_one({"_id": ObjectId(user_id)})
-    except InvalidId:
-        logger.warning(
-            "Invalid ObjectId",
-            extra={"user_id": user_id, **get_client_info(request)}
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        result = await users.insert_one(user_doc)
     except Exception as e:
         logger.error(
-            "Database error",
-            extra={"error": str(e), "user_id": user_id}
+            "Database error during admin user creation",
+            extra={"error": str(e), "email": user_data.email}
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="User creation failed"
         )
 
-    if not user:
-        logger.warning(
-            "User not found",
-            extra={"user_id": user_id, **get_client_info(request)}
-        )
+    logger.info(
+        "User created by admin",
+        extra={
+            "email": user_data.email,
+            "user_id": str(result.inserted_id),
+            "role": user_data.role,
+            "customer_id": user_data.customer_id,
+            "admin_id": admin_payload.get("user_id"),
+            **get_client_info(request)
+        }
+    )
+
+    return UserResponse(
+        id=str(result.inserted_id),
+        email=user_doc["email"],
+        name=user_doc["name"],
+        created_at=user_doc["created_at"],
+        role=user_doc["role"],
+        customer_id=user_doc["customer_id"]
+    )
+
+
+@router.put("/users/{user_id}", response_model=UserResponse)
+@limiter.limit("10/minute")
+async def update_user(
+    request: Request,
+    user_id: str,
+    user_data: AdminUserUpdate,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection)
+):
+    """
+    Update user fields. Admin only.
+
+    All fields are optional - only provided fields will be updated.
+    Password will be hashed if provided.
+    """
+    # Verify admin access
+    admin_payload = await verify_admin_access(authorization, request)
+
+    # Validate user ID format
+    if not user_id or len(user_id) != 24 or not all(c in '0123456789abcdefABCDEF' for c in user_id):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    # Build update document (only include provided fields)
+    update_doc = {}
+    if user_data.email is not None:
+        # Check if new email already exists
+        existing_user = await users.find_one({"email": user_data.email, "_id": {"$ne": ObjectId(user_id)}})
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already in use by another user"
+            )
+        update_doc["email"] = user_data.email
+
+    if user_data.password is not None:
+        update_doc["hashed_password"] = hash_password(user_data.password)
+
+    if user_data.name is not None:
+        update_doc["name"] = user_data.name
+
+    if user_data.role is not None:
+        update_doc["role"] = user_data.role
+
+    if user_data.customer_id is not None:
+        update_doc["customer_id"] = user_data.customer_id
+
+    # Check if there's anything to update
+    if not update_doc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided for update"
+        )
+
+    # Update user
+    try:
+        result = await users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": update_doc}
+        )
+    except InvalidId:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
 
-    return user
+    # Get updated user
+    updated_user = await get_user_by_id(user_id, users, request)
 
-
-def create_token_pair(user_id: str, email: str, role: str, customer_id: Optional[str]) -> TokenPairResponse:
-    """Create access and refresh tokens for a user."""
-    access_token, expires_in = create_access_token(
-        user_id=user_id,
-        email=email,
-        role=role,
-        customer_id=customer_id
+    logger.info(
+        "User updated by admin",
+        extra={
+            "target_user_id": user_id,
+            "updated_fields": list(update_doc.keys()),
+            "admin_id": admin_payload.get("user_id"),
+            **get_client_info(request)
+        }
     )
-    refresh_token = create_refresh_token(user_id=user_id)
 
-    return TokenPairResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=expires_in
+    return UserResponse(
+        id=str(updated_user["_id"]),
+        email=updated_user["email"],
+        name=updated_user["name"],
+        created_at=updated_user["created_at"],
+        role=updated_user.get("role", "customer"),
+        customer_id=updated_user.get("customer_id")
     )
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def delete_user(
+    request: Request,
+    user_id: str,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection)
+):
+    """
+    Delete a user by ID. Admin only.
+    """
+    # Verify admin access
+    admin_payload = await verify_admin_access(authorization, request)
+
+    # Validate user ID format
+    if not user_id or len(user_id) != 24 or not all(c in '0123456789abcdefABCDEF' for c in user_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    # Delete user
+    try:
+        result = await users.delete_one({"_id": ObjectId(user_id)})
+    except InvalidId:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    logger.info(
+        "User deleted",
+        extra={
+            "deleted_user_id": user_id,
+            "admin_id": admin_payload.get("user_id"),
+            **get_client_info(request)
+        }
+    )
+
+    return None

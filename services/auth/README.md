@@ -4,15 +4,31 @@ FastAPI service for user authentication with JWT tokens and MongoDB storage.
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/register` | Register new user |
-| POST | `/auth/login` | Login, returns access + refresh tokens |
-| POST | `/auth/refresh` | Get new access token using refresh token |
-| GET | `/auth/me` | Get current user info (requires auth header) |
-| DELETE | `/auth/users/{user_id}` | Delete user (admin only) |
-| GET | `/health` | Liveness probe |
-| GET | `/ready` | Readiness probe (checks MongoDB) |
+### Authentication Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/auth/register` | Register new user (⚠️ deprecated) | No |
+| POST | `/auth/login` | Login, returns access + refresh tokens | No |
+| POST | `/auth/logout` | Logout (clears cookie) | No |
+| POST | `/auth/refresh` | Get new access token using refresh token | No |
+| GET | `/auth/me` | Get current user info | Yes (header or cookie) |
+
+### Admin User Management Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/auth/users` | List all users (paginated) | Admin only |
+| GET | `/auth/users/{user_id}` | Get specific user by ID | Admin only |
+| POST | `/auth/users` | Create user with role & customer_id | Admin only |
+| PUT | `/auth/users/{user_id}` | Update user (all fields optional) | Admin only |
+| DELETE | `/auth/users/{user_id}` | Delete user | Admin only |
+
+### Health Check Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/health` | Liveness probe | No |
+| GET | `/ready` | Readiness probe (checks MongoDB) | No |
+
+**Note:** ⚠️ `/auth/register` is deprecated. Use `/auth/users` (admin only) to create users with proper `customer_id` assignment.
 
 ## JWT Structure
 
@@ -26,11 +42,50 @@ FastAPI service for user authentication with JWT tokens and MongoDB storage.
 }
 ```
 
-**Roles:** `admin`, `internal`, `customer`
+**Roles:** `admin`, `internal`, `customer`, `device`
 
 **Tokens:**
 - Access token: 60 min, used for API requests
 - Refresh token: 7 days, used to get new access tokens
+
+## Admin User Management Examples
+
+All admin endpoints require `Authorization: Bearer <token>` header with admin role.
+
+### List Users (with pagination)
+```bash
+GET /auth/users?page=1&page_size=50
+Authorization: Bearer <admin_token>
+```
+
+### Create User
+```bash
+POST /auth/users
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "securepass123",
+  "name": "John Doe",
+  "role": "customer",
+  "customer_id": "1060598736"
+}
+```
+
+### Update User (partial update)
+```bash
+PUT /auth/users/{user_id}
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "role": "admin",
+  "customer_id": "1234567890"
+}
+```
+
+All fields are optional in update requests - only provided fields are updated.
 
 ## Local Development
 
