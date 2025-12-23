@@ -130,6 +130,21 @@ Portal → Gateway (/api/auth/*) → Auth Service (FastAPI)
 Follows the same pattern as other services (ingestion, processor)
 Gateway acts as single entry point with JWT validation
 
+## Recent updates (2025-12-22)
+
+  - `GET /api/data/dashboard` — weekly, monthly, hourly series plus `total` and `average`.
+  - `GET /api/data/quality` — returns simple quality metrics (completeness implemented; accuracy/timeliness placeholders).
+  - `GET /api/data/top-consumers` — returns top customers aggregated from Influx (groups by `consumer.id` tag).
+  - `GET /api/data/logs` — currently a placeholder returning an empty array (no centralized log store implemented in the repo).
+
+ Influx tag name: `top-consumers` groups by the `consumer.id` tag. If your Influx points use a different tag name (for example `customer_id`), update the Flux query in `services/queries/src/influx.py` accordingly.
+
+- X-Customer-ID requirement: The Query Service requires `X-Customer-ID` on `/api/data/*` endpoints to enforce customer isolation. The Gateway must extract and forward this from a validated JWT (or run in dev-bypass mode with `DEV_CUSTOMER_ID`). Without it, requests will return 403.
+- Quality metrics: `accuracy` and `timeliness` are not implemented (placeholders). Decide on the definitions and data sources for these metrics so they can be implemented correctly.
+- Logs: `GET /api/data/logs` is a placeholder. If you want real logs in the admin UI, add or point to a log store (Loki, Elasticsearch, or a logs endpoint).
+- Register consistency: Some local edits may have reverted portal changes — `Register.jsx` should use the shared API client (`api.register`) for consistency; if you prefer that I can re-apply it.
+- Accessibility: Chart bars use `div` with `role="button"` but are missing keyboard handlers; consider adding `onKeyDown` to support keyboard activation.
+
 # TODO 
 ## Making Logs Dynamic
 1. Create a logs endpoint in a backend service (e.g., gateway or new logs service)
@@ -162,7 +177,6 @@ Calculate from actual data ingestion stats (missing records, validation errors, 
 Create endpoint: GET /api/analytics/summary returning {totalConsumption, costEstimate, averageDaily}
 Fetch and display real values
 Pull from InfluxDB aggregations (sum, average queries)
-Update currency conversion if needed (SEK rate)
 
 # ADMIN DASHBOARD
 - system overview (GRAFANA)
@@ -178,3 +192,11 @@ Update currency conversion if needed (SEK rate)
 
 # MINA SIDOR DASHBOARD
 - Individual data consumption
+
+# Recommended next work 
+
+Implement Influx-backed top-consumers aggregate (group by consumer.id) in influx.py and wire it into /api/data/top-consumers 
+
+Implement a simple completeness metric for data-quality (e.g., presence of expected daily points over last 7 days) and add accuracy/timeliness definitions.
+
+Wire logs to a log store (Loki/Elasticsearch) or a small log table if you have logs centrally.
