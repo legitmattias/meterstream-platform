@@ -16,9 +16,6 @@ export default function AdminDashboard(props) {
     opsGrafanaUrl,
     logs,
     topConsumers,
-    quality,
-    monthSeries,
-    weekSeries,
   } = props
 
   const role = user?.role || 'customer'
