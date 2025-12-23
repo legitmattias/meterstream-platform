@@ -567,13 +567,14 @@ newman-integration-test:
   image: postman/newman:alpine
   script:
     # Run Newman with the MeterStream API collection against staging environment
-    - newman run tests/integration/collections/meterstream-api.json
-        --environment tests/integration/environments/staging.json
-        --env-var "admin_password=$STAG_BOOTSTRAP_ADMIN_PASSWORD"
-        --reporters cli,junit
-        --reporter-junit-export newman-results.xml
-        --color on
-        --disable-unicode
+    - |
+      newman run tests/integration/collections/meterstream-api.json \
+        --environment tests/integration/environments/staging.json \
+        --env-var "admin_password=$STAG_BOOTSTRAP_ADMIN_PASSWORD" \
+        --reporters cli,junit \
+        --reporter-junit-export newman-results.xml \
+        --color on \
+        --disable-unicode \
         --bail
   artifacts:
     when: always
@@ -587,17 +588,18 @@ newman-integration-test:
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
       when: manual
   # Depends on all core staging services being deployed
-  needs:
-    - job: deploy-gateway-staging
-      optional: true
-    - job: deploy-auth-staging
-      optional: true
-    - job: deploy-ingestion-staging
-      optional: true
-    - job: deploy-processor-staging
-      optional: true
-    - job: deploy-queries-staging
-      optional: true
+  #  needs:
+  #   - job: deploy-gateway-staging
+  #     optional: true
+  #   - job: deploy-auth-staging
+  #     optional: true
+  #   - job: deploy-ingestion-staging
+  #     optional: true
+  #   - job: deploy-processor-staging
+  #     optional: true
+  #   - job: deploy-queries-staging
+  #     optional: true
+  needs: []  # Empty array allows running independently for testing
   allow_failure: false
 
 
