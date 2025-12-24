@@ -18,10 +18,10 @@ def get_influx_client() -> InfluxDBClient:
     )
 
 
-def _consumer_filter(customer_id: str | None) -> str:
-    """Return a Flux filter string for consumer.id when customer_id is provided."""
+def _customer_filter(customer_id: str | None) -> str:
+    """Return a Flux filter string for customer tag when customer_id is provided."""
     if customer_id:
-        return f"\n      |> filter(fn: (r) => r[\"consumer.id\"] == \"{customer_id}\")"
+        return f"\n      |> filter(fn: (r) => r[\"customer\"] == \"{customer_id}\")"
     return ""
 
 
@@ -41,13 +41,13 @@ def query_weekly_days(
             f"and r._time < {int(year)+1}-01-01T00:00:00Z)"
         )
 
-    consumer_filter = _consumer_filter(customer_id)
+    customer_filter = _customer_filter(customer_id)
 
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> range(start: -7d)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      {consumer_filter}
+      {customer_filter}
       {year_filter}
       |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
@@ -81,13 +81,13 @@ def query_monthly_days(
     else:
         end_date = datetime(year, month + 1, 1)
 
-    consumer_filter = _consumer_filter(customer_id)
+    customer_filter = _customer_filter(customer_id)
 
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start_date.isoformat()}Z, stop: {end_date.isoformat()}Z)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      {consumer_filter}
+      {customer_filter}
       |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
     '''
@@ -115,13 +115,13 @@ def query_hourly(
     start = date.replace(hour=0, minute=0, second=0)
     end = start + timedelta(days=1)
 
-    consumer_filter = _consumer_filter(customer_id)
+    customer_filter = _customer_filter(customer_id)
 
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start.isoformat()}Z, stop: {end.isoformat()}Z)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      {consumer_filter}
+      {customer_filter}
       |> aggregateWindow(every: 1h, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
     '''
@@ -151,13 +151,13 @@ def query_total_and_average(
             f"and r._time < {int(year)+1}-01-01T00:00:00Z)"
         )
 
-    consumer_filter = _consumer_filter(customer_id)
+    customer_filter = _customer_filter(customer_id)
 
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> range(start: -365d)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      {consumer_filter}
+      {customer_filter}
       {year_filter}
     '''
 
@@ -198,13 +198,13 @@ def query_consumption(
     start = config["range"]
     window = config["window"]
 
-    consumer_filter = _consumer_filter(customer_id)
+    customer_filter = _customer_filter(customer_id)
 
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start})
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      {consumer_filter}
+      {customer_filter}
       |> aggregateWindow(every: {window}, fn: sum, createEmpty: false)
       |> sort(columns: ["_time"])
     '''
@@ -239,13 +239,13 @@ def query_summary(
 
     start = period_config[period]
 
-    consumer_filter = _consumer_filter(customer_id)
+    customer_filter = _customer_filter(customer_id)
 
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start})
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-      {consumer_filter}
+      {customer_filter}
     '''
 
     tables = query_api.query(flux_query, org=settings.influx_org)
@@ -282,7 +282,7 @@ def query_top_consumers(
       |> range(start: {start})
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
       |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)
-      |> group(columns: ["consumer.id"])
+      |> group(columns: ["customer"])
       |> sum(column: "_value")
       |> sort(columns: ["_value"], desc: true)
       |> limit(n: {limit})
@@ -293,7 +293,7 @@ def query_top_consumers(
     results: dict[str, float] = {}
     for table in tables:
         for record in table.records:
-            customer = record.values.get("consumer.id") or record.values.get("consumer_id") or "unknown"
+            customer = record.values.get("customer") or "unknown"
             val = record.get_value()
             if val is None:
                 continue
