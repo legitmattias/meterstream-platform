@@ -30,7 +30,7 @@
       "value": ""
     },
     {
-      "key": "device_token",
+      "key": "ingest_token",
       "value": ""
     }
   ],
@@ -542,10 +542,10 @@
     },
     {
       "name": "5. Full Pipeline (Auth → Ingest → Query)",
-      "description": "Tests the complete data flow. Device user ingests data, customer queries it.",
+      "description": "Tests the complete data flow. Internal user ingests data, customer queries it.",
       "item": [
         {
-          "name": "Login Device User (for ingestion)",
+          "name": "Login Internal User (for ingestion)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/auth/login",
@@ -557,7 +557,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{device_email}}\",\n  \"password\": \"{{device_password}}\"\n}"
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\"\n}"
             }
           },
           "event": [
@@ -565,19 +565,19 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Device user login successful', function () {",
+                  "pm.test('Internal user login successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Token has device role', function () {",
+                  "pm.test('Token has internal role', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData).to.have.property('access_token');",
-                  "    pm.collectionVariables.set('device_token', jsonData.access_token);",
+                  "    pm.collectionVariables.set('ingest_token', jsonData.access_token);",
                   "    ",
                   "    // Decode JWT to verify role",
                   "    var parts = jsonData.access_token.split('.');",
                   "    var payload = JSON.parse(atob(parts[1]));",
-                  "    pm.expect(payload.role).to.eql('device');",
+                  "    pm.expect(payload.role).to.eql('internal');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -669,7 +669,7 @@
           ]
         },
         {
-          "name": "Ingest Data (with device role)",
+          "name": "Ingest Data (with internal role)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/ingest",
@@ -680,7 +680,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{device_token}}"
+                "value": "Bearer {{ingest_token}}"
               }
             ],
             "body": {
@@ -693,7 +693,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Device ingest successful', function () {",
+                  "pm.test('Ingest successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
@@ -708,17 +708,21 @@
           ]
         },
         {
-          "name": "Query Dashboard Data",
+          "name": "Query Dashboard Data (verify pipeline)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/api/data/dashboard?year=2025",
+              "raw": "{{base_url}}/api/data/dashboard?year=2025&date=2025-01-15",
               "host": ["{{base_url}}"],
               "path": ["api", "data", "dashboard"],
               "query": [
                 {
                   "key": "year",
                   "value": "2025"
+                },
+                {
+                  "key": "date",
+                  "value": "2025-01-15"
                 }
               ]
             },
@@ -731,6 +735,21 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Wait for async pipeline processing (NATS -> Processor -> InfluxDB)",
+                  "const sleep = (ms) => {",
+                  "    const start = Date.now();",
+                  "    while (Date.now() - start < ms) {}",
+                  "};",
+                  "console.log('Waiting 5s for pipeline processing...');",
+                  "sleep(5000);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -742,6 +761,7 @@
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData).to.have.property('customer_id');",
                   "    pm.expect(jsonData).to.have.property('weekly_days');",
+                  "    pm.expect(jsonData).to.have.property('hourly');",
                   "    pm.expect(jsonData).to.have.property('total');",
                   "    pm.expect(jsonData).to.have.property('average');",
                   "});",
@@ -749,6 +769,26 @@
                   "pm.test('Customer ID matches seeded user', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData.customer_id).to.eql(pm.environment.get('seeded_user_customer_id'));",
+                  "});",
+                  "",
+                  "pm.test('Pipeline processed ingested data correctly', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    // We ingested 50.0, 75.5, 60.25 at consecutive hours",
+                  "    // Hours may shift due to server timezone (CET/CEST)",
+                  "    // Find hours with non-zero consumption",
+                  "    var nonZeroHours = jsonData.hourly.filter(h => h.consumption > 0);",
+                  "    ",
+                  "    pm.expect(nonZeroHours.length, 'Should have 3 hours with data').to.eql(3);",
+                  "    ",
+                  "    // Values should appear in order: 50.0, 75.5, 60.25",
+                  "    var values = nonZeroHours.map(h => h.consumption);",
+                  "    pm.expect(values).to.eql([50.0, 75.5, 60.25]);",
+                  "});",
+                  "",
+                  "pm.test('Total matches sum of ingested values', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    // Total should be at least 185.75 (50.0 + 75.5 + 60.25)",
+                  "    pm.expect(jsonData.total).to.be.at.least(185.75);",
                   "});"
                 ],
                 "type": "text/javascript"

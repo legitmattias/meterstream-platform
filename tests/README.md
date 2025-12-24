@@ -1,7 +1,6 @@
 # MeterStream Tests
 
 Integration and load tests for the MeterStream pipeline.
-Integration and load tests for the MeterStream pipeline.
 
 ## Structure
 
@@ -9,9 +8,7 @@ Integration and load tests for the MeterStream pipeline.
 tests/
 ├── integration/           # API integration tests (Newman/Postman)
 │   ├── collections/
-│   ├── collections/
 │   │   └── meterstream-api.json
-│   └── environments/
 │   └── environments/
 │       └── staging.json
 └── load/                  # Load tests (Locust)
@@ -29,7 +26,7 @@ Integration tests run **automatically in the CI/CD pipeline** after staging depl
 1. `test` - Unit tests
 2. `build` - Docker images
 3. `deploy-staging` - Deploy to staging
-4. **`integration-test`** ← Newman tests run here (manual trigger)
+4. **`integration-test`** - Newman tests run here (manual trigger)
 5. `deploy-prod` - Production deployment
 
 The `newman-integration-test` job:
@@ -45,10 +42,8 @@ The `newman-integration-test` job:
 
 ```bash
 # Install
-# Install
 npm install -g newman
 
-# Run
 # Run
 newman run tests/integration/collections/meterstream-api.json \
   --environment tests/integration/environments/staging.json \
@@ -63,33 +58,29 @@ newman run tests/integration/collections/meterstream-api.json \
 | 2. Unauthenticated Error Cases | Ingest/query/auth without credentials |
 | 3. Auth Flow | Register, login, refresh token, logout |
 | 4. Ingestion | Single reading, batch readings |
-| 5. Full Pipeline | Seeded user → ingest → query dashboard/consumption/summary |
+| 5. Full Pipeline | Internal user ingests, customer queries |
 | 6. Cleanup | Delete test user (requires admin) |
 
-The **Full Pipeline** tests verify complete data flow using a seeded user with `customer_id`.
-| 1. Health Checks | Gateway health endpoint |
-| 2. Unauthenticated Error Cases | Ingest/query/auth without credentials |
-| 3. Auth Flow | Register, login, refresh token, logout |
-| 4. Ingestion | Single reading, batch readings |
-| 5. Full Pipeline | Seeded user → ingest → query dashboard/consumption/summary |
-| 6. Cleanup | Delete test user (requires admin) |
+### Full Pipeline Tests
 
-The **Full Pipeline** tests verify complete data flow using a seeded user with `customer_id`.
+The **Full Pipeline** tests verify complete data flow:
+
+1. **Internal user** (`test_email`) logs in and ingests test data
+2. **Customer user** (`seeded_user_email`) logs in and queries the data
+3. Tests verify exact values are returned (timezone-independent assertions)
+
+**Notes:**
+- Uses `internal` role for ingestion (not `device` - that's for IoT meters)
+- 5s pre-request delay before querying to allow async pipeline processing
+- Assertions check values in sequence, not specific hours (handles CET/CEST timezone shifts)
 
 ### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
 | `base_url` | API base URL |
-| `test_email` / `test_password` | Test user credentials |
-| `seeded_user_email` / `seeded_user_password` | Seeded user with customer_id |
-| `seeded_user_customer_id` | Customer ID for pipeline tests |
-| `admin_password` | Admin password (pass via CLI) |
-| Variable | Description |
-|----------|-------------|
-| `base_url` | API base URL |
-| `test_email` / `test_password` | Test user credentials |
-| `seeded_user_email` / `seeded_user_password` | Seeded user with customer_id |
+| `test_email` / `test_password` | Internal user for ingestion |
+| `seeded_user_email` / `seeded_user_password` | Customer user for querying |
 | `seeded_user_customer_id` | Customer ID for pipeline tests |
 | `admin_password` | Admin password (pass via CLI) |
 
@@ -101,23 +92,9 @@ pip install -r tests/load/requirements.txt
 
 # Run (interactive - opens web UI at http://localhost:8089)
 locust -f tests/load/locustfile.py --host=http://194.47.170.217
-# Install
-pip install -r tests/load/requirements.txt
 
-# Run (interactive - opens web UI at http://localhost:8089)
-locust -f tests/load/locustfile.py --host=http://194.47.170.217
-
-# Run (headless)
 # Run (headless)
 locust -f tests/load/locustfile.py \
-  --host=http://194.47.170.217 \
-  --users 50 --spawn-rate 10 --run-time 5m --headless
-```
-
-### User Classes
-
-- **MeterStreamUser** - Standard user, mixed operations (single/batch ingestion, health, auth)
-- **HighVolumeUser** - Stress testing, sends large batches rapidly
   --host=http://194.47.170.217 \
   --users 50 --spawn-rate 10 --run-time 5m --headless
 ```
@@ -142,22 +119,18 @@ locust -f tests/load/locustfile.py \
 # Smoke test
 locust -f tests/load/locustfile.py \
   --host=http://194.47.170.217 \
-  --host=http://194.47.170.217 \
   --users 1 --spawn-rate 1 --run-time 30s --headless
 
 # Stress test (for HPA demo)
 locust -f tests/load/locustfile.py \
-  --host=http://194.47.170.217 \
   --host=http://194.47.170.217 \
   --users 50 --spawn-rate 10 --run-time 5m --headless
 
 # Use only HighVolumeUser class
 locust -f tests/load/locustfile.py \
   --host=http://194.47.170.217 \
-  --host=http://194.47.170.217 \
   --users 20 --spawn-rate 5 --run-time 3m --headless \
   HighVolumeUser
 ```
 
-**Environment:** `TEST_USER_PASSWORD` - Password for test user (default: testpassword123)
 **Environment:** `TEST_USER_PASSWORD` - Password for test user (default: testpassword123)
