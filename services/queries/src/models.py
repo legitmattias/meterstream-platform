@@ -34,7 +34,7 @@ class HourlyData(BaseModel):
 class ConsumptionResponse(BaseModel):
     """Consumption query response."""
 
-    customer_id: str
+    customer_id: str | None  # None for internal/admin users (global view)
     period: str
     data: list[ConsumptionDataPoint]
 
@@ -42,7 +42,7 @@ class ConsumptionResponse(BaseModel):
 class SummaryResponse(BaseModel):
     """Summary statistics response."""
 
-    customer_id: str
+    customer_id: str | None  # None for internal/admin users (global view)
     period: str
     total: float
     average: float
@@ -51,7 +51,7 @@ class SummaryResponse(BaseModel):
 class DashboardResponse(BaseModel):
     """Complete dashboard data response."""
 
-    customer_id: str
+    customer_id: str | None  # None for internal/admin users (global view)
     year: str | None  # "2024", "2025", or "All"
     month: int | None  # 1-12 if monthly view requested
     date: str | None  # YYYY-MM-DD if hourly view requested
@@ -86,12 +86,12 @@ class ConsumerData(BaseModel):
 class TopConsumersResponse(BaseModel):
     """Response for top consumers endpoint."""
 
-    customer_id: str
+    customer_id: str | None  # None for internal/admin users (global view)
     consumers: list[ConsumerData] = []
 
 
 class LogsResponse(BaseModel):
     """Simple logs response placeholder."""
 
-    customer_id: str
+    customer_id: str | None  # None for internal/admin users (global view)
     logs: list[str] = []
