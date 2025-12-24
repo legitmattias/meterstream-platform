@@ -45,15 +45,15 @@ The `newman-integration-test` job:
 
 ```bash
 # Install
-# Install
 npm install -g newman
 
-# Run
 # Run
 newman run tests/integration/collections/meterstream-api.json \
   --environment tests/integration/environments/staging.json \
   --env-var "admin_password=YOUR_ADMIN_PASSWORD"
 ```
+
+**Note:** Pipeline tests include a 5s pre-request delay before querying data to allow async processing (NATS → Processor → InfluxDB) to complete.
 
 ### Test Scenarios
 

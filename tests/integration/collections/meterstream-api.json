@@ -708,17 +708,21 @@
           ]
         },
         {
-          "name": "Query Dashboard Data",
+          "name": "Query Dashboard Data (verify pipeline)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/api/data/dashboard?year=2025",
+              "raw": "{{base_url}}/api/data/dashboard?year=2025&date=2025-01-15",
               "host": ["{{base_url}}"],
               "path": ["api", "data", "dashboard"],
               "query": [
                 {
                   "key": "year",
                   "value": "2025"
+                },
+                {
+                  "key": "date",
+                  "value": "2025-01-15"
                 }
               ]
             },
@@ -731,6 +735,21 @@
           },
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Wait for async pipeline processing (NATS -> Processor -> InfluxDB)",
+                  "const sleep = (ms) => {",
+                  "    const start = Date.now();",
+                  "    while (Date.now() - start < ms) {}",
+                  "};",
+                  "console.log('Waiting 5s for pipeline processing...');",
+                  "sleep(5000);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -742,6 +761,7 @@
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData).to.have.property('customer_id');",
                   "    pm.expect(jsonData).to.have.property('weekly_days');",
+                  "    pm.expect(jsonData).to.have.property('hourly');",
                   "    pm.expect(jsonData).to.have.property('total');",
                   "    pm.expect(jsonData).to.have.property('average');",
                   "});",
@@ -749,6 +769,28 @@
                   "pm.test('Customer ID matches seeded user', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData.customer_id).to.eql(pm.environment.get('seeded_user_customer_id'));",
+                  "});",
+                  "",
+                  "pm.test('Pipeline processed ingested data correctly', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    // We ingested: 50.0 at 08:00, 75.5 at 09:00, 60.25 at 10:00",
+                  "    var h8 = jsonData.hourly.find(h => h.hour === 8);",
+                  "    var h9 = jsonData.hourly.find(h => h.hour === 9);",
+                  "    var h10 = jsonData.hourly.find(h => h.hour === 10);",
+                  "    ",
+                  "    pm.expect(h8, 'Hour 8 data missing').to.exist;",
+                  "    pm.expect(h9, 'Hour 9 data missing').to.exist;",
+                  "    pm.expect(h10, 'Hour 10 data missing').to.exist;",
+                  "    ",
+                  "    pm.expect(h8.consumption).to.eql(50.0);",
+                  "    pm.expect(h9.consumption).to.eql(75.5);",
+                  "    pm.expect(h10.consumption).to.eql(60.25);",
+                  "});",
+                  "",
+                  "pm.test('Total matches sum of ingested values', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    // Total should be at least 185.75 (50.0 + 75.5 + 60.25)",
+                  "    pm.expect(jsonData.total).to.be.at.least(185.75);",
                   "});"
                 ],
                 "type": "text/javascript"
