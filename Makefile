@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run producer-staging generate-token peek-kafka extract-data clean integration-test load-interactive load-smoke load-normal load-stress load-spike
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run producer-staging generate-token peek-kafka extract-small extract-medium extract-large clean integration-test load-interactive load-smoke load-normal load-stress load-spike
 
 help:
 	@echo "MeterStream Development Commands"
@@ -49,10 +49,11 @@ help:
 	@echo "  make load-stress       Stress test for HPA scaling (50 users, 5m)"
 	@echo "  make load-spike        Sudden load burst (100 users, 1m)"
 	@echo ""
-	@echo "Data:"
-	@echo "  make extract-data    Regenerate test_data_large.csv (50 customers, 4 years)"
+	@echo "Data Extraction:"
+	@echo "  make extract-small   Generate test_data_small.csv (seeded customers, 7 days)"
+	@echo "  make extract-medium  Generate test_data_medium.csv (seeded customers, 3 months)"
+	@echo "  make extract-large   Generate test_data_large.csv (seeded customers, 4 years)"
 	@echo "                       Requires source dataset in meterstream-filer/"
-	@echo "                       Use scripts/extract_test_data.py for custom extractions"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean         Remove all containers and volumes"
@@ -148,9 +149,15 @@ peek-kafka:
 	@test -d scripts/node_modules || (cd scripts && npm install)
 	cd scripts && node peek_kalmar1_kafka.js
 
-# Extract test data from source dataset
-extract-data:
-	python3 scripts/extract_test_data.py -n 50 --seed 42 -o test_data_large.csv
+# Extract test data from source dataset (uses seeded customer IDs)
+extract-small:
+	python3 scripts/extract_test_data.py --start 2020-01-01 --end 2020-01-07 -o test_data_small.csv
+
+extract-medium:
+	python3 scripts/extract_test_data.py --start 2020-01-01 --end 2020-03-31 -o test_data_medium.csv
+
+extract-large:
+	python3 scripts/extract_test_data.py -o test_data_large.csv
 
 # Integration Tests (Newman)
 STAGING_URL ?= http://194.47.170.217
