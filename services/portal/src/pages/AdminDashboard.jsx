@@ -21,18 +21,33 @@ export default function AdminDashboard(props) {
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>MeterStream Dashboard</h1>
-        <div className="user-info">
-          <span>Welcome, {user?.email || 'User'}</span>
+        <div className="header-actions">
+          {role === 'admin' && (
+            <a
+              className="header-link"
+              href={opsGrafanaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open Grafana
+            </a>
+          )}
+          {role !== 'customer' && (
+            <a className="header-link" href="/landing">Back to Landing</a>
+          )}
+          <span className="user-email">Welcome, {user?.email || 'User'}</span>
           <button onClick={logout}>Logout</button>
         </div>
       </header>
 
-      <SummaryCards
-        monthTotal={monthTotal}
-        monthAverage={monthAverage}
-        hourlyMax={hourlyMax}
-        weekMax={weekMax}
-      />
+      {activeTab !== 'overview' && (
+        <SummaryCards
+          monthTotal={monthTotal}
+          monthAverage={monthAverage}
+          hourlyMax={hourlyMax}
+          weekMax={weekMax}
+        />
+      )}
 
       <div className="tabs">
         {role === 'admin' ? (
@@ -59,25 +74,6 @@ export default function AdminDashboard(props) {
           </button>
         )}
       </div>
-
-      {role === 'admin' && (
-        <div className="admin-actions" style={{ margin: '0.5rem 0' }}>
-          <a
-            className="grafana-button"
-            href={opsGrafanaUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Open Grafana
-          </a>
-        </div>
-      )}
-
-      {role !== 'customer' && (
-        <div style={{ margin: '0.5rem 0' }}>
-          <a className="grafana-button" href="/landing">Back to Landing</a>
-        </div>
-      )}
 
       <main className="dashboard-content">
         {role === 'admin' && activeTab === 'overview' && (

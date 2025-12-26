@@ -17,13 +17,15 @@
   color: #333;
 }
 
-.user-info {
+.user-info,
+.header-actions {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 
-.user-info button {
+.user-info button,
+.header-actions button {
   padding: 0.5rem 1rem;
   background: #667eea;
   color: white;
@@ -33,8 +35,29 @@
   font-size: 0.9rem;
 }
 
-.user-info button:hover {
+.user-info button:hover,
+.header-actions button:hover {
   background: #5568d3;
+}
+
+.header-link {
+  color: #667eea;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.header-link:hover {
+  background: rgba(102, 126, 234, 0.1);
+  text-decoration: none;
+}
+
+.user-email {
+  color: #666;
+  font-size: 0.9rem;
 }
 
 .tabs {

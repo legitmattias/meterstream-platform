@@ -19,8 +19,8 @@ SERVICES = {
     "influxdb": "http://influxdb:8086/health",
 }
 
-# NATS monitoring endpoint
-NATS_MONITORING_URL = "http://nats:8222/jsz"
+# NATS monitoring endpoint - include streams and consumers detail for lag calculation
+NATS_MONITORING_URL = "http://nats:8222/jsz?streams=true&consumers=true"
 
 
 async def fetch_nats_metrics() -> dict[str, Any]:
@@ -31,19 +31,32 @@ async def fetch_nats_metrics() -> dict[str, Any]:
             response.raise_for_status()
             data = response.json()
 
-            # Extract consumer lag from streams if available
+            # Extract consumer lag from stream details
             consumer_lag = 0
-            if "streams" in data:
-                for stream in data.get("streams", []):
+            stream_count = 0
+            consumer_count = 0
+
+            # When using ?streams=true, "streams" becomes a list of stream objects
+            streams_data = data.get("account_details", [])
+            for account in streams_data:
+                for stream in account.get("stream_detail", []):
+                    stream_count += 1
                     for consumer in stream.get("consumer_detail", []):
+                        consumer_count += 1
                         consumer_lag += consumer.get("num_pending", 0)
+
+            # Fallback to summary counts if detail not available
+            if stream_count == 0:
+                stream_count = data.get("streams", 0)
+            if consumer_count == 0:
+                consumer_count = data.get("consumers", 0)
 
             return {
                 "status": "healthy",
                 "messages": data.get("messages", 0),
                 "bytes": data.get("bytes", 0),
-                "streams": data.get("streams", 0),
-                "consumers": data.get("consumers", 0),
+                "streams": stream_count,
+                "consumers": consumer_count,
                 "consumer_lag": consumer_lag,
             }
     except httpx.RequestError as e:
