@@ -19,8 +19,9 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-# Source data location (relative to this script)
-DEFAULT_SOURCE = Path(__file__).parent.parent.parent / "meterstream-filer/data/final_df.csv/final_df.csv"
+# Source data location
+# Default: look in repo's data/ folder, or specify with --source
+DEFAULT_SOURCE = Path(__file__).parent.parent / "data" / "final_df.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "data"
 
 # Customer IDs that match seeded users in auth service (seed_test_data.py)
@@ -208,6 +209,9 @@ def main():
     # Validate source exists
     if not args.source.exists():
         print(f"Error: Source file not found: {args.source}", file=sys.stderr)
+        print(f"\nEither:", file=sys.stderr)
+        print(f"  1. Copy/symlink the full dataset to: {DEFAULT_SOURCE}", file=sys.stderr)
+        print(f"  2. Use --source to specify the path to final_df.csv", file=sys.stderr)
         sys.exit(1)
 
     # Parse dates

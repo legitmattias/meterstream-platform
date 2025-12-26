@@ -53,7 +53,7 @@ help:
 	@echo "  make extract-small   Generate test_data_small.csv (seeded customers, 7 days)"
 	@echo "  make extract-medium  Generate test_data_medium.csv (seeded customers, 3 months)"
 	@echo "  make extract-large   Generate test_data_large.csv (seeded customers, 4 years)"
-	@echo "                       Requires source dataset in meterstream-filer/"
+	@echo "                       Requires data/final_df.csv (copy/symlink or use --source)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean         Remove all containers and volumes"
