@@ -25,6 +25,11 @@ export function ServiceHealthStrip({ services, natsStatus }) {
           latencyMs={services?.ingestion?.latency_ms}
         />
         <ServiceHealthIndicator
+          name="Processor"
+          status={services?.processor?.status}
+          latencyMs={services?.processor?.latency_ms}
+        />
+        <ServiceHealthIndicator
           name="Auth"
           status={services?.auth?.status}
           latencyMs={services?.auth?.latency_ms}
@@ -38,6 +43,11 @@ export function ServiceHealthStrip({ services, natsStatus }) {
           name="InfluxDB"
           status={services?.influxdb?.status}
           latencyMs={services?.influxdb?.latency_ms}
+        />
+        <ServiceHealthIndicator
+          name="Grafana"
+          status={services?.grafana?.status}
+          latencyMs={services?.grafana?.latency_ms}
         />
         <ServiceHealthIndicator
           name="NATS"
