@@ -16,14 +16,16 @@ export function PipelineStats({ pipeline }) {
         <MetricCard
           title="Total Processed"
           value={formatNumber(pipeline?.total_processed || 0)}
-          subtitle="all time"
+          subtitle="last 30 days"
           color="green"
+          tooltip="Number of meter readings processed and stored in InfluxDB in the last 30 days."
         />
         <MetricCard
           title="Last Hour"
           value={formatNumber(pipeline?.last_hour || 0)}
           subtitle="readings"
           color="blue"
+          tooltip="Number of meter readings processed in the last hour. Shows current pipeline throughput."
         />
       </div>
     </div>

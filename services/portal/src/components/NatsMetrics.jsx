@@ -27,6 +27,7 @@ export function NatsMetrics({ nats, history }) {
           subtitle="in stream"
           color="blue"
           trend={history?.map(h => ({ value: h.messages })) || []}
+          tooltip="Total number of messages stored in NATS JetStream. Includes both processed and unprocessed messages."
         />
         <MetricCard
           title="Consumer Lag"
@@ -34,17 +35,20 @@ export function NatsMetrics({ nats, history }) {
           subtitle="pending"
           color={nats?.consumer_lag > 100 ? 'orange' : 'green'}
           trend={history?.map(h => ({ value: h.lag })) || []}
+          tooltip="Number of messages waiting to be processed. High lag indicates the processor cannot keep up with incoming data."
         />
         <MetricCard
           title="Storage Used"
           value={formatBytes(nats?.bytes || 0)}
           color="purple"
+          tooltip="Disk space used by NATS JetStream for message persistence."
         />
         <MetricCard
           title="Consumers"
           value={nats?.consumers || 0}
           subtitle={`${nats?.streams || 0} streams`}
           color="teal"
+          tooltip="Number of active consumers (processor instances) subscribed to NATS streams."
         />
       </div>
     </div>
