@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 # Service endpoints for health checks (internal K8s DNS)
 SERVICES = {
     "ingestion": "http://ingestion:8000/health",
+    "processor": "http://processor:8000/health",
     "auth": "http://auth:8000/health",
     "gateway": "http://gateway:8000/health",
     "influxdb": "http://influxdb:8086/health",
+    "grafana": "http://grafana:3000/api/health",
 }
 
 # NATS monitoring endpoint - include streams and consumers detail for lag calculation

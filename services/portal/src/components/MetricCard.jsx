@@ -2,9 +2,9 @@ import React from 'react';
 import { ResponsiveContainer, AreaChart, Area } from 'recharts';
 import './MetricCard.css';
 
-export function MetricCard({ title, value, subtitle, trend, color = 'blue' }) {
+export function MetricCard({ title, value, subtitle, trend, color = 'blue', tooltip }) {
   return (
-    <div className={`metric-card ${color}`}>
+    <div className={`metric-card ${color}`} title={tooltip}>
       <div className="metric-title">{title}</div>
       <div className="metric-value">{value}</div>
       {subtitle && <div className="metric-subtitle">{subtitle}</div>}
