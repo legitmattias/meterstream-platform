@@ -316,10 +316,10 @@ async def get_system_metrics(
     System metrics for admin dashboard.
 
     Returns NATS queue stats, service health, and pipeline metrics.
-    Restricted to admin and internal roles.
+    Restricted to admin role only.
     """
-    if not x_user_role or x_user_role.lower() not in ("admin", "internal"):
-        raise HTTPException(status_code=403, detail="Admin or internal role required")
+    if not x_user_role or x_user_role.lower() != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
 
     try:
         metrics = await collect_all_metrics()
