@@ -324,6 +324,7 @@ build-portal:
 # MongoDB - StatefulSet with persistent storage
 deploy-mongodb-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock mongo image
   script:
     # Create/Update MongoDB secret from CI/CD variables (only if it doesn't exist or needs update)
     - |
@@ -354,6 +355,7 @@ deploy-mongodb-staging:
 # NATS - Message queue
 deploy-nats-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock nats image
   script:
     # Apply all NATS manifests
     - kubectl apply -f k8s/nats/ -n meterstream
@@ -469,6 +471,7 @@ deploy-gateway-staging:
 # Ingress - Traefik routing (frontend + API gateway)
 deploy-ingress-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - configures traefik ingress
   script:
     - kubectl apply -f k8s/ingress/ingress.yaml -n meterstream
     - kubectl get ingress -n meterstream
@@ -478,6 +481,7 @@ deploy-ingress-staging:
 # InfluxDB - Time-series database
 deploy-influx-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock influxdb image
   script:
     # Create InfluxDB initialization secret from CI/CD variables
     - |
@@ -502,6 +506,7 @@ deploy-influx-staging:
 # Grafana - Metrics visualization (depends on: InfluxDB)
 deploy-grafana-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock grafana image
   script:
     # Verify required dependencies are running
     - require_statefulset influxdb
