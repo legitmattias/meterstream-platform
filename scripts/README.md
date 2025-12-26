@@ -52,7 +52,9 @@ TEST_USER_PASSWORD=strongpass python produce_test_data.py --url http://prod.exam
 
 Extracts test data subsets from the full Kalmar Energi dataset. By default, uses customer IDs that match seeded test users in the auth service, ensuring portal users can see their own data.
 
-**Requires:** Access to the source dataset (`meterstream-filer/data/final_df.csv/final_df.csv`)
+**Source dataset:** By default, looks for `data/final_df.csv` in the repo. Either:
+1. Copy/symlink the full dataset there, or
+2. Use `--source` to specify the path
 
 ```bash
 # Seeded customers (default), 7 days - small dataset
