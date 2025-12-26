@@ -281,3 +281,28 @@ async def data_proxy_root(request: Request):
     logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
     return await proxy_request(request, target_url, token_payload)
 # ==== END ANALYTICS INTEGRATION ====
+
+
+# ==== SYSTEM MONITORING ====
+@app.api_route(
+    "/api/system/{path:path}",
+    methods=["GET", "OPTIONS"],
+)
+async def system_proxy(request: Request, path: str):
+    """Proxy requests to Queries Service system endpoints with JWT validation."""
+    # Handle CORS preflight requests
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    token_payload = await validate_jwt(request)
+    target_url = f"{settings.queries_service_url}/api/system/{path}"
+    logger.debug("Proxying system request to: %s (user: %s)", target_url, token_payload.sub)
+    return await proxy_request(request, target_url, token_payload)
+# ==== END SYSTEM MONITORING ====

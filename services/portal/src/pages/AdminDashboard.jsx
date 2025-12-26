@@ -1,7 +1,6 @@
 import React from 'react'
 import { SummaryCards } from '../components/SummaryCards'
-import { TopConsumersTable } from '../components/TopConsumersTable'
-import { LogsList } from '../components/LogsList'
+import { SystemMonitoring } from '../components/SystemMonitoring'
 
 export default function AdminDashboard(props) {
   const {
@@ -14,8 +13,6 @@ export default function AdminDashboard(props) {
     activeTab,
     setActiveTab,
     opsGrafanaUrl,
-    logs,
-    topConsumers,
   } = props
 
   const role = user?.role || 'customer'
@@ -85,28 +82,7 @@ export default function AdminDashboard(props) {
       <main className="dashboard-content">
         {role === 'admin' && activeTab === 'overview' && (
           <div className="tab-content">
-            <div className="dashboard-section">
-              <h2>Real-Time Ingestion Metrics</h2>
-              <div className="grafana-embed">
-                <iframe
-                  src={opsGrafanaUrl}
-                  width="100%"
-                  height="300"
-                  frameBorder="0"
-                  title="Ingestion Metrics"
-                ></iframe>
-              </div>
-            </div>
-
-            <div className="dashboard-section">
-              <h2>Top Consumers</h2>
-              <TopConsumersTable consumers={topConsumers} />
-            </div>
-
-            <div className="dashboard-section">
-              <h2>Logs</h2>
-              <LogsList logs={logs} />
-            </div>
+            <SystemMonitoring />
           </div>
         )}
 
