@@ -20,6 +20,7 @@ from .influx import (
     query_top_consumers,
     query_quality_metrics,
 )
+from .system_metrics import collect_all_metrics
 from .models import (
     ConsumptionDataPoint,
     ConsumptionResponse,
@@ -304,3 +305,25 @@ async def get_logs(
     except Exception as e:
         logger.error("Failed to fetch logs for %s: %s", x_customer_id, e)
         raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+# ==== SYSTEM MONITORING ====
+@app.get("/api/system/metrics")
+async def get_system_metrics(
+    x_user_role: Annotated[str | None, Header()] = None,
+):
+    """
+    System metrics for admin dashboard.
+
+    Returns NATS queue stats, service health, and pipeline metrics.
+    Restricted to admin and internal roles.
+    """
+    if not x_user_role or x_user_role.lower() not in ("admin", "internal"):
+        raise HTTPException(status_code=403, detail="Admin or internal role required")
+
+    try:
+        metrics = await collect_all_metrics()
+        return metrics
+    except Exception as e:
+        logger.error("Failed to collect system metrics: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to collect metrics") from e
