@@ -120,30 +120,48 @@ async def check_all_services() -> dict[str, dict[str, Any]]:
     return results
 
 
+# Cache for expensive total count query
+_pipeline_cache = {"total": 0, "last_updated": None}
+
+
 async def get_pipeline_stats() -> dict[str, Any]:
     """Get pipeline statistics from InfluxDB."""
+    global _pipeline_cache
+
     try:
         from .influx import get_influx_client
 
         client = get_influx_client()
         query_api = client.query_api()
 
-        # Count total data points
-        total_query = f'''
-        from(bucket: "{settings.influx_bucket}")
-          |> range(start: 2020-01-01T00:00:00Z)
-          |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-          |> group()
-          |> count()
-        '''
+        # Only refresh total count every 5 minutes (expensive query)
+        now = datetime.utcnow()
+        should_refresh_total = (
+            _pipeline_cache["last_updated"] is None
+            or (now - _pipeline_cache["last_updated"]).total_seconds() > 300
+        )
 
-        total_tables = query_api.query(total_query, org=settings.influx_org)
-        total_processed = 0
-        for table in total_tables:
-            for record in table.records:
-                total_processed = record.get_value() or 0
+        total_processed = _pipeline_cache["total"]
 
-        # Count last hour
+        if should_refresh_total:
+            # Count last 30 days instead of all time (much faster)
+            total_query = f'''
+            from(bucket: "{settings.influx_bucket}")
+              |> range(start: -30d)
+              |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
+              |> group()
+              |> count()
+            '''
+
+            total_tables = query_api.query(total_query, org=settings.influx_org)
+            for table in total_tables:
+                for record in table.records:
+                    total_processed = record.get_value() or 0
+
+            _pipeline_cache["total"] = total_processed
+            _pipeline_cache["last_updated"] = now
+
+        # Count last hour (fast query)
         hour_query = f'''
         from(bucket: "{settings.influx_bucket}")
           |> range(start: -1h)
@@ -165,7 +183,7 @@ async def get_pipeline_stats() -> dict[str, Any]:
     except Exception as e:
         logger.error("Failed to get pipeline stats: %s", e)
         return {
-            "total_processed": 0,
+            "total_processed": _pipeline_cache["total"],  # Return cached value on error
             "last_hour": 0,
             "error": str(e),
         }
