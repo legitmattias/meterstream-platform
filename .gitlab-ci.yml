@@ -506,7 +506,34 @@ deploy-grafana-staging:
     # Verify required dependencies are running
     - require_statefulset influxdb
 
-    # Apply all Grafana manifests (configmaps, service, deployment)
+    # Create datasource secret with token substituted by shell
+    # (Grafana does NOT substitute env vars in secureJsonData)
+    - |
+      kubectl -n meterstream apply -f - <<EOF
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: grafana-datasource-secret
+      stringData:
+        datasources.yaml: |
+          apiVersion: 1
+          datasources:
+            - name: InfluxDB
+              uid: influxdb
+              type: influxdb
+              access: proxy
+              url: http://influxdb:8086
+              isDefault: true
+              jsonData:
+                version: Flux
+                organization: meterstream
+                defaultBucket: meterstream
+                httpMode: POST
+              secureJsonData:
+                token: "${STAG_INFLUXDB_INIT_ADMIN_TOKEN}"
+      EOF
+
+    # Apply Grafana manifests (service, deployment, dashboard configmaps)
     - kubectl apply -f k8s/grafana/ -n meterstream
 
     # Wait for deployment to finish (max 2 minutes)
