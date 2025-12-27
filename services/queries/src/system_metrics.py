@@ -12,14 +12,18 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 # Service endpoints for health checks (internal K8s DNS)
+# Ordered by pipeline flow: Gateway -> Auth -> Ingestion -> NATS -> Processor -> InfluxDB -> Grafana -> Portal
 SERVICES = {
+    "gateway": "http://gateway:8000/health",
+    "auth": "http://auth:8000/health",
     "ingestion": "http://ingestion:8000/health",
     "processor": "http://processor:8000/health",
-    "auth": "http://auth:8000/health",
-    "gateway": "http://gateway:8000/health",
     "influxdb": "http://influxdb:8086/health",
     "grafana": "http://grafana:3000/api/health",
+    "portal": "http://portal:80",
 }
+# Note: MongoDB has no HTTP health endpoint (requires pymongo)
+# Note: Queries service can't check itself (circular dependency)
 
 # NATS monitoring endpoint - include streams and consumers detail for lag calculation
 NATS_MONITORING_URL = "http://nats:8222/jsz?streams=true&consumers=true"
@@ -27,9 +31,11 @@ NATS_MONITORING_URL = "http://nats:8222/jsz?streams=true&consumers=true"
 
 async def fetch_nats_metrics() -> dict[str, Any]:
     """Fetch NATS JetStream metrics from monitoring endpoint."""
+    start_time = datetime.utcnow()
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(NATS_MONITORING_URL)
+            latency_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
             response.raise_for_status()
             data = response.json()
 
@@ -55,6 +61,7 @@ async def fetch_nats_metrics() -> dict[str, Any]:
 
             return {
                 "status": "healthy",
+                "latency_ms": round(latency_ms, 1),
                 "messages": data.get("messages", 0),
                 "bytes": data.get("bytes", 0),
                 "streams": stream_count,
@@ -62,9 +69,11 @@ async def fetch_nats_metrics() -> dict[str, Any]:
                 "consumer_lag": consumer_lag,
             }
     except httpx.RequestError as e:
+        latency_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
         logger.warning("Failed to fetch NATS metrics: %s", e)
         return {
             "status": "unhealthy",
+            "latency_ms": round(latency_ms, 1),
             "messages": 0,
             "bytes": 0,
             "streams": 0,
@@ -73,9 +82,11 @@ async def fetch_nats_metrics() -> dict[str, Any]:
             "error": str(e),
         }
     except Exception as e:
+        latency_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
         logger.error("Unexpected error fetching NATS metrics: %s", e)
         return {
             "status": "error",
+            "latency_ms": round(latency_ms, 1),
             "messages": 0,
             "bytes": 0,
             "streams": 0,

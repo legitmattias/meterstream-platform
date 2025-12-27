@@ -67,7 +67,7 @@ export function SystemMonitoring() {
 
   return (
     <div className="system-monitoring">
-      <ServiceHealthStrip services={services} natsStatus={nats?.status} />
+      <ServiceHealthStrip services={services} nats={nats} />
       <NatsMetrics nats={nats} history={history} />
       <PipelineStats pipeline={pipeline} />
 
