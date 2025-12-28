@@ -41,7 +41,7 @@ export default function AdminDashboard(props) {
         </div>
       </header>
 
-      {activeTab !== 'overview' && (
+      {activeTab === 'analytics' && (
         <SummaryCards
           monthTotal={monthTotal}
           monthAverage={monthAverage}
