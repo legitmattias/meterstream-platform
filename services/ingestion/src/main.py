@@ -4,9 +4,13 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from .config import settings
+
+# Maximum request body size: 10MB (enough for 10,000 readings at ~200 bytes each)
+MAX_BODY_SIZE = 10 * 1024 * 1024
 from .models import HealthResponse, IngestResponse, MeterReadingBatch
 from .nats_client import nats_client
 
@@ -33,6 +37,18 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    """Reject requests with body larger than MAX_BODY_SIZE."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_BODY_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"Request body too large. Maximum size is {MAX_BODY_SIZE // (1024*1024)}MB"}
+        )
+    return await call_next(request)
 
 
 @app.get("/health", response_model=HealthResponse)
