@@ -327,7 +327,7 @@ async def me(request: Request, authorization: Optional[str] = Header(None), user
 #===========================================================================
 
 @router.get("/users", response_model=UserListResponse)
-@limiter.limit("30/minute")
+@limiter.limit("200/minute")  # Higher limit for admin-only search endpoint
 async def list_users(
     request: Request,
     page: int = 1,

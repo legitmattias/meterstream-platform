@@ -19,8 +19,18 @@ export function UserManagement() {
   const [totalUsers, setTotalUsers] = useState(0)
   const [validationError, setValidationError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const pageSize = 20
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 400) // Wait 400ms after user stops typing
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   // Form state
   const [formData, setFormData] = useState({
@@ -33,13 +43,13 @@ export function UserManagement() {
 
   useEffect(() => {
     loadUsers()
-  }, [page, searchTerm, roleFilter])
+  }, [page, debouncedSearchTerm, roleFilter])
 
   const loadUsers = async () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await api.getUsers(page, pageSize, searchTerm, roleFilter)
+      const data = await api.getUsers(page, pageSize, debouncedSearchTerm, roleFilter)
       setUsers(data.users)
       setTotalUsers(data.total)
     } catch (err) {
