@@ -21,7 +21,7 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     """Model for user data in API responses (register, login, refresh)"""
     id: str
-    email: EmailStr
+    email: str  # Use str instead of EmailStr to allow test emails like staff@test.local
     name: str
     created_at: datetime
     role: str = "customer"
