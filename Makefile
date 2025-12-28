@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run generate-token peek-kafka clean
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run producer-staging generate-token peek-kafka extract-small extract-medium extract-large clean integration-test load-interactive load-smoke load-normal load-stress load-spike
 
 help:
 	@echo "MeterStream Development Commands"
@@ -33,9 +33,27 @@ help:
 	@echo "  make gateway-lint    Run linter on gateway"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make producer-run    Run the test data producer"
-	@echo "  make generate-token  Generate a test JWT token"
-	@echo "  make peek-kafka      Peek at Kalmar Energi Team 1's Kafka stream"
+	@echo "  make producer-run      Run test data producer locally (100 readings)"
+	@echo "  make producer-staging  Load large dataset to staging (with checkpoint)"
+	@echo "  make generate-token    Generate a test JWT token"
+	@echo "  make peek-kafka        Peek at Kalmar Energi Team 1's Kafka stream"
+	@echo ""
+	@echo "Integration Tests (Newman):"
+	@echo "  make integration-test  Run Newman API tests against staging"
+	@echo "                         Pass ADMIN_PASSWORD=xxx for cleanup tests"
+	@echo ""
+	@echo "Load Tests (Locust):"
+	@echo "  make load-interactive  Open web UI at http://localhost:8089"
+	@echo "  make load-smoke        Quick sanity check (1 user, 30s)"
+	@echo "  make load-normal       Baseline performance (10 users, 2m)"
+	@echo "  make load-stress       Stress test for HPA scaling (50 users, 5m)"
+	@echo "  make load-spike        Sudden load burst (100 users, 1m)"
+	@echo ""
+	@echo "Data Extraction:"
+	@echo "  make extract-small   Generate test_data_small.csv (seeded customers, 7 days)"
+	@echo "  make extract-medium  Generate test_data_medium.csv (seeded customers, 3 months)"
+	@echo "  make extract-large   Generate test_data_large.csv (seeded customers, 4 years)"
+	@echo "                       Requires data/final_df.csv (copy/symlink or use --source)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean         Remove all containers and volumes"
@@ -116,6 +134,10 @@ producer-run:
 	cd scripts && \
 	python3 produce_test_data.py --url http://localhost:8000 --limit 100
 
+producer-staging:
+	cd scripts && \
+	python3 produce_test_data.py --url http://194.47.170.217 --file ../data/test_data_large.csv --batch-size 200 --rate 0
+
 # Generate test JWT token
 generate-token:
 	cd services/gateway && \
@@ -126,6 +148,49 @@ generate-token:
 peek-kafka:
 	@test -d scripts/node_modules || (cd scripts && npm install)
 	cd scripts && node peek_kalmar1_kafka.js
+
+# Extract test data from source dataset (uses seeded customer IDs)
+extract-small:
+	python3 scripts/extract_test_data.py --start 2020-01-01 --end 2020-01-07 -o test_data_small.csv
+
+extract-medium:
+	python3 scripts/extract_test_data.py --start 2020-01-01 --end 2020-03-31 -o test_data_medium.csv
+
+extract-large:
+	python3 scripts/extract_test_data.py -o test_data_large.csv
+
+# Integration Tests (Newman)
+STAGING_URL ?= http://194.47.170.217
+ADMIN_PASSWORD ?=
+
+integration-test:
+	newman run tests/integration/collections/meterstream-api.json \
+		--environment tests/integration/environments/staging.json \
+		--env-var "admin_password=$(ADMIN_PASSWORD)"
+
+# Load Tests (Locust)
+load-interactive:
+	locust -f tests/load/locustfile.py --host=$(STAGING_URL)
+
+load-smoke:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 1 --spawn-rate 1 --run-time 30s --headless
+
+load-normal:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 10 --spawn-rate 5 --run-time 2m --headless
+
+load-stress:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 50 --spawn-rate 10 --run-time 5m --headless
+
+load-spike:
+	locust -f tests/load/locustfile.py \
+		--host=$(STAGING_URL) \
+		--users 100 --spawn-rate 50 --run-time 1m --headless
 
 # Cleanup
 clean:

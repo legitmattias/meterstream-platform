@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Bootstrap admin (only used if no admin exists)
-    bootstrap_admin_email: str = "admin@meterstream.local"
+    bootstrap_admin_email: str = "admin@meterstream.com"
     bootstrap_admin_password: str | None = None
 
     # Seed test data (for staging/development only)

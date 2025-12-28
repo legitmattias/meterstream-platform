@@ -1,0 +1,69 @@
+.health-strip {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.health-strip h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+.health-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.service-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f3f4f6;
+  border-radius: 20px;
+  font-size: 0.875rem;
+}
+
+.service-indicator.healthy {
+  background: #dcfce7;
+}
+
+.service-indicator.unhealthy {
+  background: #fee2e2;
+}
+
+.service-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.service-indicator.healthy .service-dot {
+  background: #22c55e;
+}
+
+.service-indicator.unhealthy .service-dot {
+  background: #ef4444;
+}
+
+.service-name {
+  font-weight: 500;
+  color: #374151;
+}
+
+.service-latency {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+@media (max-width: 768px) {
+  .health-indicators {
+    justify-content: center;
+  }
+}

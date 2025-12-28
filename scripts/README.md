@@ -12,16 +12,20 @@ pip install -r requirements.txt
 
 Sends test data to the Ingestion Service via the API Gateway. Authenticates as `data-loader@example.com` (seeded test user).
 
+**Features:**
+- Checkpoint support: saves progress after each batch, auto-resumes on restart
+- Automatic token refresh when JWT expires during long-running loads
+
 ```bash
-# Send to staging (authenticates automatically)
+# Send to staging (authenticates automatically, resumes from checkpoint)
 python produce_test_data.py --url http://194.47.170.217
 
-# Send 100 readings slowly (for debugging)
-python produce_test_data.py --url http://staging.example --limit 100 --rate 2
+# Load large dataset with safe rate (recommended for first load)
+python produce_test_data.py --url http://194.47.170.217 \
+  --file ../data/test_data_large.csv --batch-size 50 --rate 2
 
-# Use medium dataset with large batches
-python produce_test_data.py --url http://staging.example \
-  --file ../data/test_data_medium.csv --batch-size 200
+# Start fresh, ignoring any existing checkpoint
+python produce_test_data.py --url http://194.47.170.217 --reset-checkpoint
 
 # Local development (no auth, direct to ingestion service)
 python produce_test_data.py --no-auth --url http://localhost:8000
@@ -38,9 +42,45 @@ TEST_USER_PASSWORD=strongpass python produce_test_data.py --url http://prod.exam
 - `--rate` - Batches per second (default: 10, 0 = unlimited)
 - `--limit` - Max readings to send (default: 0 = all)
 - `--no-auth` - Skip authentication (for local dev)
+- `--reset-checkpoint` - Ignore existing checkpoint and start from beginning
+- `--checkpoint-file` - Path to checkpoint file (default: .produce_checkpoint)
 
 **Environment:**
 - `TEST_USER_PASSWORD` - Password for data-loader user (default: testpassword123)
+
+## extract_test_data.py
+
+Extracts test data subsets from the full Kalmar Energi dataset. By default, uses customer IDs that match seeded test users in the auth service, ensuring portal users can see their own data.
+
+**Source dataset:** By default, looks for `data/final_df.csv` in the repo. Either:
+1. Copy/symlink the full dataset there, or
+2. Use `--source` to specify the path
+
+```bash
+# Seeded customers (default), 7 days - small dataset
+python extract_test_data.py --start 2020-01-01 --end 2020-01-07 -o test_data_small.csv
+
+# Seeded customers, 3 months - medium dataset
+python extract_test_data.py --start 2020-01-01 --end 2020-03-31 -o test_data_medium.csv
+
+# Seeded customers, full 4 years - large dataset
+python extract_test_data.py -o test_data_large.csv
+
+# Random 50 customers instead of seeded (for testing)
+python extract_test_data.py --random-customers -n 50 -o test_data_random.csv
+```
+
+**Options:**
+- `-o, --output` - Output filename in data/ directory (required)
+- `--start` - Start date YYYY-MM-DD (default: 2020-01-01)
+- `--end` - End date YYYY-MM-DD (default: 2023-12-31)
+- `--random-customers` - Use random customers instead of seeded customer IDs
+- `-n, --customers` - Number of customers (only with --random-customers)
+- `--seed` - Random seed for reproducible selection (only with --random-customers)
+- `--source` - Custom source file path
+- `--output-dir` - Custom output directory
+
+**Seeded customers:** The script includes 20 customer IDs that match the seeded users in `services/auth/src/seed_test_data.py`. This ensures Alice, Bob, and other test users can see their own data in the portal.
 
 ## generate_test_token.py
 

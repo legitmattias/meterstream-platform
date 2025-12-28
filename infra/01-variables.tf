@@ -22,9 +22,9 @@ variable "image_name" {
 }
 
 variable "server_flavor" {
-  description = "Chosen machine resourse (we might want to downgrade)"
+  description = "Chosen machine resource"
   type    = string
-  default = "c4-r4-d80" 
+  default = "c4-r8-d80"
 }
 
 variable "external_network_id" {

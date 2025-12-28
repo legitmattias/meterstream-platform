@@ -18,12 +18,12 @@ spec:
                 name: gateway
                 port:
                   number: 8000
-          # Frontend
+          # Portal - React frontend application
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: frontend
+                name: portal
                 port:
                   number: 80
          

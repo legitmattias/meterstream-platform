@@ -1,0 +1,35 @@
+.system-monitoring {
+  padding: 1rem 0;
+}
+
+/* Loading and Error States */
+.loading-state,
+.error-state {
+  text-align: center;
+  padding: 3rem;
+  background: white;
+  border-radius: 8px;
+  color: #666;
+}
+
+.error-state {
+  color: #dc2626;
+}
+
+.error-detail {
+  font-size: 0.875rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+/* Last Updated */
+.last-updated {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  padding: 0.5rem;
+}
+
+.update-error {
+  color: #ef4444;
+}

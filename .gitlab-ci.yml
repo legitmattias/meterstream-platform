@@ -8,11 +8,12 @@
 #   - main → Production environment (via git tags)
 #
 # Stages:
-#   1. test-connection - Verify kubectl connectivity
-#   2. Test            - Run tests for each service
-#   3. build           - Build Docker images with Kaniko
-#   4. deploy-staging  - Deploy to staging (manual)
-#   5. deploy-prod     - Deploy to production (git tags only)
+#   1. test-connection  - Verify kubectl connectivity
+#   2. Test             - Run tests for each service
+#   3. build            - Build Docker images with Kaniko
+#   4. deploy-staging   - Deploy to staging (manual)
+#   5. integration-test - Run Newman API tests against staging
+#   6. deploy-prod      - Deploy to production (git tags only)
 # ==============================================================================
 
 stages:
@@ -20,6 +21,7 @@ stages:
   - test
   - build
   - deploy-staging
+  - integration-test
   - deploy-prod
 
 # ------------------------------------------------------------------------------
@@ -192,10 +194,57 @@ build-gateway:
   variables:
     SERVICE_NAME: gateway
 
-build-frontend:
+
+build-queries:
   extends: .build
   variables:
-    SERVICE_NAME: frontend
+    SERVICE_NAME: queries
+
+build-portal:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "$CI_REGISTRY": {
+            "username": "$CI_REGISTRY_USER",
+            "password": "$CI_REGISTRY_PASSWORD"
+          },
+          "https://index.docker.io/v1/": {
+            "username": "$DOCKERHUB_USERNAME",
+            "password": "$DOCKERHUB_TOKEN"
+          }
+        }
+      }
+      EOF
+    - |
+      # Determine destinations based on context
+      DESTINATIONS="--destination ${IMAGE_BASE}/portal:${TAG}"
+      DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/portal:latest"
+
+      # If this is a version tag, also tag with the version
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/portal:${CI_COMMIT_TAG}"
+      fi
+
+      # Build with correct Kubernetes service URLs for portal
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}/services/portal" \
+        --dockerfile "${CI_PROJECT_DIR}/services/portal/Dockerfile" \
+        --build-arg VITE_API_BASE_URL=/api \
+        --build-arg VITE_GRAFANA_URL=/api/grafana \
+        $DESTINATIONS \
+        --cache=true \
+        --cache-ttl=168h
+  rules:
+    - when: manual
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: always
 
 # ==============================================================================
 # DEPLOY STAGING
@@ -275,6 +324,7 @@ build-frontend:
 # MongoDB - StatefulSet with persistent storage
 deploy-mongodb-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock mongo image
   script:
     # Create/Update MongoDB secret from CI/CD variables (only if it doesn't exist or needs update)
     - |
@@ -305,6 +355,7 @@ deploy-mongodb-staging:
 # NATS - Message queue
 deploy-nats-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock nats image
   script:
     # Apply all NATS manifests
     - kubectl apply -f k8s/nats/ -n meterstream
@@ -358,9 +409,11 @@ deploy-auth-staging:
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Apply manifests (configmap, service, deployment)
-    - kubectl apply -f k8s/auth/ -n meterstream
+    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
+    - kubectl apply -f k8s/auth/service.yaml -n meterstream
+    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
 
-    # Enable test data seeding for staging
+    # Enable test data seeding for staging 
     - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
 
     # Update deployment to use newly built image
@@ -415,22 +468,10 @@ deploy-gateway-staging:
   rules:
     - when: manual
 
-# Frontend - Static nginx serving HTML
-deploy-frontend-staging:
-  extends: .deploy-base
-  needs:
-    - job: build-frontend
-      optional: true
-  script:
-    - kubectl apply -f k8s/frontend/ -n meterstream
-    - kubectl -n meterstream set image deploy/frontend frontend="${IMAGE_BASE}/frontend:${TAG}"
-    - kubectl -n meterstream rollout status deploy/frontend --timeout=120s
-  rules:
-    - when: manual
-
 # Ingress - Traefik routing (frontend + API gateway)
 deploy-ingress-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - configures traefik ingress
   script:
     - kubectl apply -f k8s/ingress/ingress.yaml -n meterstream
     - kubectl get ingress -n meterstream
@@ -440,6 +481,7 @@ deploy-ingress-staging:
 # InfluxDB - Time-series database
 deploy-influx-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock influxdb image
   script:
     # Create InfluxDB initialization secret from CI/CD variables
     - |
@@ -464,11 +506,39 @@ deploy-influx-staging:
 # Grafana - Metrics visualization (depends on: InfluxDB)
 deploy-grafana-staging:
   extends: .deploy-base
+  needs: []  # No build dependency - uses stock grafana image
   script:
     # Verify required dependencies are running
     - require_statefulset influxdb
 
-    # Apply all Grafana manifests (configmaps, service, deployment)
+    # Create datasource secret with token substituted by shell
+    # (Grafana does NOT substitute env vars in secureJsonData)
+    - |
+      kubectl -n meterstream apply -f - <<EOF
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: grafana-datasource-secret
+      stringData:
+        datasources.yaml: |
+          apiVersion: 1
+          datasources:
+            - name: InfluxDB
+              uid: influxdb
+              type: influxdb
+              access: proxy
+              url: http://influxdb:8086
+              isDefault: true
+              jsonData:
+                version: Flux
+                organization: meterstream
+                defaultBucket: meterstream
+                httpMode: POST
+              secureJsonData:
+                token: "${STAG_INFLUXDB_INIT_ADMIN_TOKEN}"
+      EOF
+
+    # Apply Grafana manifests (service, deployment, dashboard configmaps)
     - kubectl apply -f k8s/grafana/ -n meterstream
 
     # Wait for deployment to finish (max 2 minutes)
@@ -476,10 +546,100 @@ deploy-grafana-staging:
   rules:
     - when: manual
 
+# Queries - Analytics data queries (depends on: InfluxDB)
+deploy-queries-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-queries
+      optional: true
+  script:
+    # Verify required dependencies are running
+    - require_statefulset influxdb
+
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/queries/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/queries queries="${IMAGE_BASE}/queries:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/queries --timeout=120s
+  rules:
+    - when: manual
+
+# Portal - Frontend web application (depends on: Gateway)
+deploy-portal-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-portal
+      optional: true
+    # - job: deploy-gateway-staging
+    #   optional: true
+  script:
+    # Verify required dependencies are running
+    - require_running gateway
+
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/portal/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/portal portal="${IMAGE_BASE}/portal:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/portal --timeout=120s
+  rules:
+    - when: manual
+
+# ==============================================================================
+# INTEGRATION TESTS - Run Newman API tests against staging
+# ==============================================================================
+
+newman-integration-test:
+  stage: integration-test
+  image:
+    name: postman/newman:alpine
+    entrypoint: [""]
+  script:
+    # Run Newman with the MeterStream API collection against staging environment
+    - |
+      newman run tests/integration/collections/meterstream-api.json \
+        --environment tests/integration/environments/staging.json \
+        --env-var "admin_password=$STAG_BOOTSTRAP_ADMIN_PASSWORD" \
+        --reporters cli,junit \
+        --reporter-junit-export newman-results.xml \
+        --color on \
+        --disable-unicode \
+        --bail
+  artifacts:
+    when: always
+    reports:
+      junit: newman-results.xml
+    paths:
+      - newman-results.xml
+    expire_in: 1 week
+  rules:
+    # Only run after staging deployment completes
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
+      when: manual
+      #  Depends on all core staging services being deployed
+      needs:
+        - job: deploy-gateway-staging
+          optional: true
+        - job: deploy-auth-staging
+          optional: true
+        - job: deploy-ingestion-staging
+          optional: true
+        - job: deploy-processor-staging
+          optional: true
+        - job: deploy-queries-staging
+          optional: true
+      allow_failure: false
+
 
 # ==============================================================================
 # DEPLOY PRODUCTION
-# if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/' Pipeline jobb Kommer bara visas ifall det finns en git tag som machar regex. ==============================================================================
+# if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/' Pipeline jobb Kommer bara visas ifall det finns en git tag som machar regex. 
+# ==============================================================================
 
 .deploy-base-prod:
   stage: deploy-prod
@@ -628,10 +788,12 @@ deploy-auth-prod:
         --from-literal=JWT_SECRET="$JWT_SECRET_PROD" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    - kubectl apply -f k8s/auth/ -n meterstream
+    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
+    - kubectl apply -f k8s/auth/service.yaml -n meterstream
+    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
 
     # Enable test data seeding with production password
-    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
+    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=false # false for prod
     - kubectl -n meterstream set env deploy/auth TEST_USER_PASSWORD="$TEST_USER_PASSWORD"
 
     - |
@@ -647,6 +809,7 @@ deploy-auth-prod:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
+### KEEP: This is the correct deploy-ingestion-prod job (top-level)
 # Ingestion - Receives meter data (depends on: NATS)
 deploy-ingestion-prod:
   extends: .deploy-base-prod
@@ -721,28 +884,6 @@ deploy-gateway-prod:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
-# Frontend - Static nginx serving HTML
-deploy-frontend-prod:
-  extends: .deploy-base-prod
-  needs:
-    - job: build-frontend
-      optional: true
-  script:
-    - kubectl apply -f k8s/frontend/ -n meterstream
-
-    - |
-      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        IMAGE_TAG="${CI_COMMIT_TAG}"
-      else
-        IMAGE_TAG="${TAG}"
-      fi
-      kubectl -n meterstream set image deploy/frontend frontend="${IMAGE_BASE}/frontend:${IMAGE_TAG}"
-
-    - kubectl -n meterstream rollout status deploy/frontend --timeout=120s
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
-      when: manual
-
 # Ingress - Traefik routing (frontend + API gateway)
 deploy-ingress-prod:
   extends: .deploy-base-prod
@@ -752,3 +893,55 @@ deploy-ingress-prod:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
+
+
+# Queries - Analytics data queries (depends on: InfluxDB)
+deploy-queries-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-queries
+      optional: true
+  script:
+    - require_statefulset influxdb
+
+    - kubectl apply -f k8s/queries/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/queries queries="${IMAGE_BASE}/queries:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/queries --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Portal - Frontend web application (depends on: Gateway)
+deploy-portal-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-portal
+      optional: true
+    - job: deploy-gateway-prod
+      optional: true
+  script:
+    - require_running gateway
+
+    - kubectl apply -f k8s/portal/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/portal portal="${IMAGE_BASE}/portal:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/portal --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
