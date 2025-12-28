@@ -75,6 +75,31 @@ class ApiClient {
   async health() {
     return this.request('/health')
   }
+
+  // Admin user management endpoints
+  async getUsers(page = 1, pageSize = 20) {
+    return this.request(`/auth/users?page=${page}&page_size=${pageSize}`)
+  }
+
+  async createUser(userData) {
+    return this.request('/auth/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    })
+  }
+
+  async updateUser(userId, updateData) {
+    return this.request(`/auth/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    })
+  }
+
+  async deleteUser(userId) {
+    return this.request(`/auth/users/${userId}`, {
+      method: 'DELETE',
+    })
+  }
 }
 
 export const api = new ApiClient()

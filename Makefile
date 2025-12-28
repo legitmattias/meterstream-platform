@@ -117,7 +117,7 @@ auth-test:
 gateway-run:
 	cd services/gateway && \
 	source .venv/bin/activate && \
-	JWT_SECRET=test-secret-for-local-dev uvicorn src.main:app --reload
+	JWT_SECRET=test-secret-for-local-dev AUTH_SERVICE_URL=http://localhost:8001 uvicorn src.main:app --reload
 
 gateway-test:
 	cd services/gateway && \

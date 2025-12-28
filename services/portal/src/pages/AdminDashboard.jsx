@@ -1,6 +1,7 @@
 import React from 'react'
 import { SummaryCards } from '../components/SummaryCards'
 import { SystemMonitoring } from '../components/SystemMonitoring'
+import { UserManagement } from '../components/UserManagement'
 
 export default function AdminDashboard(props) {
   const {
@@ -64,6 +65,12 @@ export default function AdminDashboard(props) {
             >
               Consumer Analytics
             </button>
+            <button
+              className={`tab-button ${activeTab === 'users' ? 'active' : ''}`}
+              onClick={() => setActiveTab('users')}
+            >
+              User Management
+            </button>
           </>
         ) : (
           <button
@@ -98,6 +105,12 @@ export default function AdminDashboard(props) {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {role === 'admin' && activeTab === 'users' && (
+          <div className="tab-content">
+            <UserManagement />
           </div>
         )}
       </main>
