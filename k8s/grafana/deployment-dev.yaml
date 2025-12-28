@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: grafana-dev
+  namespace: meterstream
 spec:
   replicas: 1
   selector:
@@ -44,8 +45,13 @@ spec:
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-storage
+              mountPath: /var/lib/grafana
 
       volumes:
         - name: datasources
           configMap:
             name: grafana-datasources
+        - name: grafana-storage
+          persistentVolumeClaim:
+            claimName: grafana-dev-storage
