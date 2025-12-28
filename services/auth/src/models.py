@@ -46,7 +46,7 @@ class VerifyResponse(BaseModel):
 # Database model (hur det sparas i MongoDB)
 class UserInDB(BaseModel):
     """Model for user document stored in MongoDB"""
-    email: EmailStr
+    email: str  # Use str instead of EmailStr to allow test emails like staff@test.local
     hashed_password: str
     name: str
     role: str = "customer"
