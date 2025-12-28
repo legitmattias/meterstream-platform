@@ -1,8 +1,10 @@
-# MongoDB - Kubernetes Manifests
+# Ingress - Kubernetes Manifests
 
-Deploys **MongoDB** to Kubernetes as a **StatefulSet** with persistent storage.
+Deploys the **MeterStream Ingress** (Traefik) to expose the application via HTTP routing.
 
-MongoDB is used by the **Auth service** for user data (accounts, credentials, etc.).
+The Ingress routes:
+- `/api` → **Gateway** service (API)
+- `/` → **Portal** service (React frontend)
 
 ---
 
@@ -10,26 +12,20 @@ MongoDB is used by the **Auth service** for user data (accounts, credentials, et
 
 | File | Description |
 |------|-------------|
-| `service.yaml` | Headless Service (`clusterIP: None`) for stable StatefulSet networking |
-| `statefulset.yaml` | MongoDB StatefulSet (PVC + probes + root credentials from Secret) |
+| `ingress.yaml` | Traefik Ingress routing for Gateway + Portal |
 
 ---
 
 ## Prerequisites
 
-A Kubernetes Secret named **`mongodb-secret`** must exist in namespace `meterstream` and contain:
-
-- `username`
-- `password`
-
-> These values are used as `MONGO_INITDB_ROOT_USERNAME` and `MONGO_INITDB_ROOT_PASSWORD`.
+- **Traefik** is installed in the cluster and configured as an Ingress controller.
+- Services exist in namespace `meterstream`:
+  - `gateway` on port `8000`
+  - `portal` on port `80`
 
 ---
 
 ## Deploy
 
-Apply the Service first, then the StatefulSet:
-
 ```bash
-kubectl -n meterstream apply -f service.yaml
-kubectl -n meterstream apply -f statefulset.yaml
+kubectl -n meterstream apply -f ingress.yaml
