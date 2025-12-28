@@ -17,7 +17,10 @@ from .influx import (
     query_summary,
     query_total_and_average,
     query_weekly_days,
+    query_top_consumers,
+    query_quality_metrics,
 )
+from .system_metrics import collect_all_metrics
 from .models import (
     ConsumptionDataPoint,
     ConsumptionResponse,
@@ -27,6 +30,9 @@ from .models import (
     MonthlyDayData,
     SummaryResponse,
     WeeklyDayData,
+    DataQuality,
+    TopConsumersResponse,
+    LogsResponse,
 )
 
 logging.basicConfig(
@@ -74,16 +80,29 @@ async def health():
     return HealthResponse()
 
 
-def get_customer_id(x_customer_id: Annotated[str | None, Header()] = None) -> str:
-    """Extract and validate customer ID from headers."""
-    if not x_customer_id:
-        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
-    return x_customer_id
+def get_customer_id(
+    x_customer_id: Annotated[str | None, Header()] = None,
+    x_user_role: Annotated[str | None, Header()] = None,
+) -> str | None:
+    """Extract customer ID from headers. Allow admin/internal roles to omit customer id.
+
+    Returns the customer_id string or None when the caller is admin/internal (global view).
+    Raises HTTPException(403) for unauthenticated calls without customer id.
+    """
+    if x_customer_id:
+        return x_customer_id
+
+    # Allow admin/internal roles to call endpoints without X-Customer-ID for global views
+    if x_user_role and x_user_role.lower() in ("admin", "internal"):
+        return None
+
+    raise HTTPException(status_code=403, detail="X-Customer-ID header required")
 
 
 @app.get("/api/data/consumption", response_model=ConsumptionResponse)
 async def get_consumption(
     x_customer_id: Annotated[str | None, Header()] = None,
+    x_user_role: Annotated[str | None, Header()] = None,
     period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
 ):
     """
@@ -96,17 +115,16 @@ async def get_consumption(
     Returns:
         Consumption data points with timestamps
     """
-    if not x_customer_id:
-        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
+    customer_id = get_customer_id(x_customer_id, x_user_role)
 
     try:
         client = get_influx_client()
         query_api = client.query_api()
 
-        data = query_consumption(query_api, x_customer_id, period)
+        data = query_consumption(query_api, customer_id, period)
 
         return ConsumptionResponse(
-            customer_id=x_customer_id,
+            customer_id=customer_id,
             period=period,
             data=[
                 ConsumptionDataPoint(timestamp=d["timestamp"], consumption=d["consumption"])
@@ -122,6 +140,7 @@ async def get_consumption(
 @app.get("/api/data/summary", response_model=SummaryResponse)
 async def get_summary(
     x_customer_id: Annotated[str | None, Header()] = None,
+    x_user_role: Annotated[str | None, Header()] = None,
     period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
 ):
     """
@@ -134,17 +153,16 @@ async def get_summary(
     Returns:
         Summary statistics (total and average)
     """
-    if not x_customer_id:
-        raise HTTPException(status_code=403, detail="X-Customer-ID header required")
+    customer_id = get_customer_id(x_customer_id, x_user_role)
 
     try:
         client = get_influx_client()
         query_api = client.query_api()
 
-        stats = query_summary(query_api, x_customer_id, period)
+        stats = query_summary(query_api, customer_id, period)
 
         return SummaryResponse(
-            customer_id=x_customer_id,
+            customer_id=customer_id,
             period=period,
             **stats,
         )
@@ -157,6 +175,7 @@ async def get_summary(
 @app.get("/api/data/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
     x_customer_id: Annotated[str | None, Header()] = None,
+    x_user_role: Annotated[str | None, Header()] = None,
     year: str | None = Query(None),
     month: int | None = Query(None, ge=1, le=12),
     date: str | None = Query(None),
@@ -173,11 +192,8 @@ async def get_dashboard(
     Returns:
         Combined weekly, monthly, hourly data and summary statistics
     """
-    # If no customer ID, use default for testing
-    customer_id = x_customer_id or "test-customer"
-    
-    if not x_customer_id:
-        logger.warning("No X-Customer-ID header provided, using default customer ID for testing")
+    # Resolve customer id (admins/internal may omit and request global view)
+    customer_id = get_customer_id(x_customer_id, x_user_role)
 
     try:
         client = get_influx_client()
@@ -217,3 +233,97 @@ async def get_dashboard(
     except Exception as e:
         logger.error("Failed to query dashboard for %s: %s", customer_id, e)
         raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+# Note: more fully-typed/response-modeled endpoints for quality, top-consumers
+# and logs are defined further below (with response models). The simple stubs
+# above have been removed to avoid duplicated route definitions during merges.
+@app.get("/api/data/quality", response_model=DataQuality)
+async def get_quality(
+    x_customer_id: Annotated[str | None, Header()] = None,
+        x_user_role: Annotated[str | None, Header()] = None,
+        period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
+):
+    """Stub endpoint for data quality metrics. Returns placeholders until implemented.
+
+    Admin/internal roles may omit `X-Customer-ID` to request global metrics.
+    """
+    customer_id = get_customer_id(x_customer_id, x_user_role)
+    try:
+        client = get_influx_client()
+        query_api = client.query_api()
+        metrics = query_quality_metrics(query_api, customer_id, period)
+        return DataQuality(
+            completeness=metrics.get("completeness"),
+            accuracy=metrics.get("accuracy"),
+            timeliness=metrics.get("timeliness"),
+        )
+    except Exception as e:
+        logger.error("Failed to fetch data quality for %s: %s", x_customer_id, e)
+        raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+@app.get("/api/data/top-consumers", response_model=TopConsumersResponse)
+async def get_top_consumers(
+    x_customer_id: Annotated[str | None, Header()] = None,
+    x_user_role: Annotated[str | None, Header()] = None,
+    limit: int = Query(5, ge=1, le=50),
+):
+    """Return top consumers. Admin/internal may omit X-Customer-ID to get global list."""
+    # customer_id not required for this global aggregation; still resolve role for logging
+    customer_id = None
+    try:
+        customer_id = get_customer_id(x_customer_id, x_user_role)
+    except HTTPException:
+        # No customer id and not admin/internal -> keep customer_id None but continue to allow global
+        customer_id = None
+    try:
+        client = get_influx_client()
+        query_api = client.query_api()
+        consumers = query_top_consumers(query_api, limit=limit)
+        return TopConsumersResponse(customer_id=customer_id, consumers=[
+            {"name": c.get("name"), "consumption": c.get("consumption")} for c in consumers
+        ])
+    except Exception as e:
+        logger.error("Failed to fetch top consumers for %s: %s", x_customer_id, e)
+        raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+@app.get("/api/data/logs", response_model=LogsResponse)
+async def get_logs(
+    x_customer_id: Annotated[str | None, Header()] = None,
+    x_user_role: Annotated[str | None, Header()] = None,
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Return logs. Admin/internal users may omit X-Customer-ID for global logs."""
+    try:
+        customer_id = get_customer_id(x_customer_id, x_user_role)
+    except HTTPException:
+        customer_id = None
+    try:
+        return LogsResponse(customer_id=customer_id, logs=[])
+    except Exception as e:
+        logger.error("Failed to fetch logs for %s: %s", x_customer_id, e)
+        raise HTTPException(status_code=500, detail="Failed to query data") from e
+
+
+# ==== SYSTEM MONITORING ====
+@app.get("/api/system/metrics")
+async def get_system_metrics(
+    x_user_role: Annotated[str | None, Header()] = None,
+):
+    """
+    System metrics for admin dashboard.
+
+    Returns NATS queue stats, service health, and pipeline metrics.
+    Restricted to admin role only.
+    """
+    if not x_user_role or x_user_role.lower() != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    try:
+        metrics = await collect_all_metrics()
+        return metrics
+    except Exception as e:
+        logger.error("Failed to collect system metrics: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to collect metrics") from e

@@ -4,18 +4,50 @@ Extract a subset of meter data from the full Kalmar Energi dataset.
 
 Creates test datasets with configurable number of customers and time range.
 Output matches the schema: DateTime,CUSTOMER,AREA,Power_Consumption
+
+By default, uses customer IDs that match seeded test users in the auth service.
+This ensures portal users can see their own data.
 """
 
 import argparse
 import csv
 import random
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-# Source data location (relative to this script)
-DEFAULT_SOURCE = Path(__file__).parent.parent.parent / "meterstream-filer/data/final_df.csv/final_df.csv"
+from tqdm import tqdm
+
+# Source data location
+# Default: look in repo's data/ folder, or specify with --source
+DEFAULT_SOURCE = Path(__file__).parent.parent / "data" / "final_df.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "data"
+
+# Customer IDs that match seeded users in auth service (seed_test_data.py)
+# These MUST stay in sync with the seeded customer users
+SEEDED_CUSTOMER_IDS = {
+    "1060598736",  # Alice, Bob, Carl Andersson
+    "1060598755",  # Diana, Erik, Fiona Berg
+    "1060598764",  # Gustav, Hanna, Ivan Ek
+    "1060598773",  # Julia, Karl Lund
+    "1060598781",  # Lisa, Martin Holm
+    "1060598788",  # Nina Svensson
+    "1060598846",  # Oscar Johansson
+    "1060598856",  # Petra Karlsson
+    "1060598905",  # Quinn Nilsson
+    "1060598922",  # Rosa Eriksson
+    "1060598963",  # Simon Larsson
+    "1060598971",  # Tina Olsson
+    "1060598978",  # Ulf Persson
+    "1060599019",  # Vera Gustafsson
+    "1060599041",  # William Pettersson
+    "1060599047",  # Xena Lindberg
+    "1060599053",  # Yngve Lindgren
+    "1060599059",  # Zara Axelsson
+    "1060599082",  # Adam Lindqvist
+    "1060599089",  # Bella Magnusson
+}
 
 # Column indices in source file (0-indexed, source has leading index column)
 COL_DATETIME = 1
@@ -29,27 +61,41 @@ def parse_date(date_str: str) -> datetime:
     return datetime.strptime(date_str, "%Y-%m-%d")
 
 
+def count_lines(file_path: Path) -> int:
+    """Count lines in file using wc -l for speed."""
+    result = subprocess.run(
+        ["wc", "-l", str(file_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return int(result.stdout.split()[0])
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Extract test data subset from full meter dataset",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # 50 customers, full 4 years (2020-2023)
-  %(prog)s -n 50 -o test_data_large.csv
+  # Seeded customers (default), 7 days - small dataset
+  %(prog)s --start 2020-01-01 --end 2020-01-07 -o test_data_small.csv
 
-  # 100 customers, year 2022 only
-  %(prog)s -n 100 --start 2022-01-01 --end 2022-12-31 -o test_data_2022.csv
+  # Seeded customers, 1 month - medium dataset
+  %(prog)s --start 2020-01-01 --end 2020-01-31 -o test_data_medium.csv
 
-  # 30 customers, 2 years for year-over-year comparison
-  %(prog)s -n 30 --start 2022-01-01 --end 2023-12-31 -o test_data_yoy.csv
+  # Seeded customers, full 4 years - large dataset
+  %(prog)s -o test_data_large.csv
+
+  # Random 50 customers instead of seeded (for testing)
+  %(prog)s --random-customers -n 50 -o test_data_random.csv
         """,
     )
     parser.add_argument(
         "-n", "--customers",
         type=int,
-        required=True,
-        help="Number of customers to include",
+        default=None,
+        help="Number of customers (only used with --random-customers)",
     )
     parser.add_argument(
         "--start",
@@ -85,23 +131,25 @@ Examples:
         "--seed",
         type=int,
         default=None,
-        help="Random seed for reproducible customer selection",
+        help="Random seed for reproducible customer selection (only with --random-customers)",
+    )
+    parser.add_argument(
+        "--random-customers",
+        action="store_true",
+        help="Use random customers instead of seeded customer IDs (requires -n)",
     )
     return parser.parse_args()
 
 
-def collect_customers(source_path: Path) -> set[str]:
+def collect_customers(source_path: Path, total_lines: int) -> set[str]:
     """First pass: collect all unique customer IDs."""
-    print(f"Scanning {source_path} for unique customers...")
     customers = set()
     with open(source_path, "r", newline="") as f:
         reader = csv.reader(f)
         next(reader)  # Skip header
-        for i, row in enumerate(reader):
+        for row in tqdm(reader, total=total_lines - 1, desc="Scanning customers", unit="rows"):
             customers.add(row[COL_CUSTOMER])
-            if (i + 1) % 10_000_000 == 0:
-                print(f"  Scanned {i + 1:,} rows, found {len(customers):,} unique customers...")
-    print(f"  Found {len(customers):,} unique customers")
+    print(f"Found {len(customers):,} unique customers")
     return customers
 
 
@@ -111,12 +159,12 @@ def extract_data(
     selected_customers: set[str],
     start_date: datetime,
     end_date: datetime,
+    total_lines: int,
 ) -> tuple[int, int]:
     """Second pass: extract rows for selected customers within date range."""
     print(f"Extracting data for {len(selected_customers)} customers...")
-    print(f"  Date range: {start_date.date()} to {end_date.date()}")
+    print(f"Date range: {start_date.date()} to {end_date.date()}")
 
-    rows_read = 0
     rows_written = 0
 
     with open(source_path, "r", newline="") as src, \
@@ -129,9 +177,7 @@ def extract_data(
         next(reader)
         writer.writerow(["DateTime", "CUSTOMER", "AREA", "Power_Consumption"])
 
-        for row in reader:
-            rows_read += 1
-
+        for row in tqdm(reader, total=total_lines - 1, desc="Extracting", unit="rows"):
             if row[COL_CUSTOMER] not in selected_customers:
                 continue
 
@@ -149,18 +195,23 @@ def extract_data(
             ])
             rows_written += 1
 
-            if rows_read % 10_000_000 == 0:
-                print(f"  Processed {rows_read:,} rows, written {rows_written:,}...")
-
-    return rows_read, rows_written
+    return total_lines - 1, rows_written
 
 
 def main():
     args = parse_args()
 
+    # Validate arguments
+    if args.random_customers and args.customers is None:
+        print("Error: --random-customers requires -n/--customers", file=sys.stderr)
+        sys.exit(1)
+
     # Validate source exists
     if not args.source.exists():
         print(f"Error: Source file not found: {args.source}", file=sys.stderr)
+        print(f"\nEither:", file=sys.stderr)
+        print(f"  1. Copy/symlink the full dataset to: {DEFAULT_SOURCE}", file=sys.stderr)
+        print(f"  2. Use --source to specify the path to final_df.csv", file=sys.stderr)
         sys.exit(1)
 
     # Parse dates
@@ -175,21 +226,32 @@ def main():
         print("Error: Start date must be before end date", file=sys.stderr)
         sys.exit(1)
 
-    # Set random seed if provided
-    if args.seed is not None:
-        random.seed(args.seed)
-        print(f"Using random seed: {args.seed}")
+    # Count total lines for progress bar
+    print("Counting source file lines...")
+    total_lines = count_lines(args.source)
+    print(f"Source file: {total_lines:,} lines")
 
-    # First pass: collect all customers
-    all_customers = collect_customers(args.source)
+    # Select customers: seeded (default) or random
+    if args.random_customers:
+        # Set random seed if provided
+        if args.seed is not None:
+            random.seed(args.seed)
+            print(f"Using random seed: {args.seed}")
 
-    if args.customers > len(all_customers):
-        print(f"Warning: Requested {args.customers} customers but only {len(all_customers)} available")
-        args.customers = len(all_customers)
+        # First pass: collect all customers from source
+        all_customers = collect_customers(args.source, total_lines)
 
-    # Select random customers
-    selected_customers = set(random.sample(sorted(all_customers), args.customers))
-    print(f"Selected {len(selected_customers)} random customers")
+        if args.customers > len(all_customers):
+            print(f"Warning: Requested {args.customers} customers but only {len(all_customers)} available")
+            args.customers = len(all_customers)
+
+        # Select random customers
+        selected_customers = set(random.sample(sorted(all_customers), args.customers))
+        print(f"Selected {len(selected_customers)} random customers")
+    else:
+        # Use seeded customer IDs (matches auth service seed_test_data.py)
+        selected_customers = SEEDED_CUSTOMER_IDS.copy()
+        print(f"Using {len(selected_customers)} seeded customer IDs (matching auth service)")
 
     # Ensure output directory exists
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -202,6 +264,7 @@ def main():
         selected_customers,
         start_date,
         end_date,
+        total_lines,
     )
 
     # Report results

@@ -53,7 +53,7 @@ class TestAuthProxy:
 
 
 class TestIngestProxy:
-    """Tests for ingestion service proxy (JWT required)."""
+    """Tests for ingestion service proxy (JWT required, role restricted)."""
 
     def test_missing_token_returns_401(self, client):
         """Test that request without token returns 401."""
@@ -84,12 +84,66 @@ class TestIngestProxy:
 
         assert response.status_code == 401
 
-    def test_valid_token_allows_proxy(self, client):
-        """Test that valid token passes auth and attempts to proxy."""
+    def test_customer_role_returns_403(self, client):
+        """Test that customer role cannot ingest data."""
         exp = int(time.time()) + 3600
         token = create_test_token({
             "sub": "user-123",
             "role": "customer",
+            "exp": exp,
+        })
+
+        response = client.post(
+            "/api/ingest",
+            json={"readings": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 403
+        assert "device, admin, or internal" in response.json()["detail"]
+
+    def test_device_role_allows_ingest(self, client):
+        """Test that device role can ingest data."""
+        exp = int(time.time()) + 3600
+        token = create_test_token({
+            "sub": "device-123",
+            "role": "device",
+            "exp": exp,
+        })
+
+        response = client.post(
+            "/api/ingest",
+            json={"readings": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 502 means auth passed and gateway tried to reach backend
+        assert response.status_code == 502
+
+    def test_internal_role_allows_ingest(self, client):
+        """Test that internal role can ingest data."""
+        exp = int(time.time()) + 3600
+        token = create_test_token({
+            "sub": "staff-123",
+            "role": "internal",
+            "exp": exp,
+        })
+
+        response = client.post(
+            "/api/ingest",
+            json={"readings": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 502 means auth passed and gateway tried to reach backend
+        assert response.status_code == 502
+
+    def test_admin_role_allows_ingest(self, client):
+        """Test that admin role can ingest data."""
+        exp = int(time.time()) + 3600
+        token = create_test_token({
+            "sub": "admin-123",
+            "role": "admin",
             "exp": exp,
         })
 
@@ -167,7 +221,7 @@ class TestHeaderSecurity:
         and only set them from validated JWT claims.
         """
         exp = int(time.time()) + 3600
-        token = create_test_token({"sub": "real-user", "exp": exp})
+        token = create_test_token({"sub": "real-user", "role": "device", "exp": exp})
 
         # Attempt to inject fake admin headers
         response = client.post(

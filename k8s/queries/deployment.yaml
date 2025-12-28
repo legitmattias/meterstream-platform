@@ -35,19 +35,19 @@ spec:
             - containerPort: 8000
               name: http
           env:
-            - name: INFLUXDB_URL
+            - name: INFLUX_URL
               value: "http://influxdb:8086"
-            - name: INFLUXDB_ORG
+            - name: INFLUX_ORG
               valueFrom:
                 secretKeyRef:
                   name: influxdb-init
                   key: DOCKER_INFLUXDB_INIT_ORG
-            - name: INFLUXDB_BUCKET
+            - name: INFLUX_BUCKET
               valueFrom:
                 secretKeyRef:
                   name: influxdb-init
                   key: DOCKER_INFLUXDB_INIT_BUCKET
-            - name: INFLUXDB_TOKEN
+            - name: INFLUX_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: influxdb-init

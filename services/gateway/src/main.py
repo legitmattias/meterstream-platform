@@ -52,10 +52,15 @@ app = FastAPI(
 )
 
 # Global CORS middleware so all responses (incl. 404/500) carry headers
+# NOTE: allow_credentials=True requires specific origins (cannot use "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:5173",      # Local dev
+        "http://194.47.170.217",      # Staging
+        "http://localhost:3000",      # Alternative dev port
+    ],
+    allow_credentials=True,           # Required for cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -157,14 +162,30 @@ async def auth_proxy(request: Request, path: str):
     return await proxy_request(request, target_url)
 
 
-# Ingestion route - JWT validation required
+# Ingestion route - JWT validation required, restricted to device/admin/internal roles
+INGEST_ALLOWED_ROLES = {"device", "admin", "internal"}
+
+
 @app.api_route(
     "/api/ingest",
     methods=["POST"],
 )
 async def ingest_proxy(request: Request):
-    """Proxy requests to Ingestion Service with JWT validation."""
+    """Proxy requests to Ingestion Service with JWT validation and role check."""
     token_payload = await validate_jwt(request)
+
+    # Role-based access control - only device, admin, internal can ingest
+    if token_payload.role not in INGEST_ALLOWED_ROLES:
+        logger.warning(
+            "Ingest rejected for user %s with role %s",
+            token_payload.sub,
+            token_payload.role,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Ingestion requires device, admin, or internal role",
+        )
+
     target_url = f"{settings.ingestion_service_url}/ingest"
     logger.debug("Proxying ingest request to: %s (user: %s)", target_url, token_payload.sub)
     return await proxy_request(request, target_url, token_payload)
@@ -260,3 +281,28 @@ async def data_proxy_root(request: Request):
     logger.debug("Proxying data request to: %s (user: %s)", target_url, user_label)
     return await proxy_request(request, target_url, token_payload)
 # ==== END ANALYTICS INTEGRATION ====
+
+
+# ==== SYSTEM MONITORING ====
+@app.api_route(
+    "/api/system/{path:path}",
+    methods=["GET", "OPTIONS"],
+)
+async def system_proxy(request: Request, path: str):
+    """Proxy requests to Queries Service system endpoints with JWT validation."""
+    # Handle CORS preflight requests
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        )
+
+    token_payload = await validate_jwt(request)
+    target_url = f"{settings.queries_service_url}/api/system/{path}"
+    logger.debug("Proxying system request to: %s (user: %s)", target_url, token_payload.sub)
+    return await proxy_request(request, target_url, token_payload)
+# ==== END SYSTEM MONITORING ====

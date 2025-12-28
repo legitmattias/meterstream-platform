@@ -85,8 +85,8 @@ spec:
 
       volumes:
         - name: datasources
-          configMap:
-            name: grafana-datasources
+          secret:
+            secretName: grafana-datasource-secret
 
         - name: providers
           configMap:
