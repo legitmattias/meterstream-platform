@@ -332,15 +332,19 @@ async def list_users(
     request: Request,
     page: int = 1,
     page_size: int = 50,
+    search: Optional[str] = None,
+    role: Optional[str] = None,
     authorization: Optional[str] = Header(None),
     users=Depends(get_users_collection)
 ):
     """
-    List all users with pagination. Admin only.
+    List all users with pagination, search, and filtering. Admin only.
 
     Query params:
     - page: Page number (default: 1)
     - page_size: Users per page (default: 50, max: 100)
+    - search: Search in email, name, or customer_id (optional)
+    - role: Filter by role: customer, admin, internal, device (optional)
     """
     # Verify admin access
     await verify_admin_access(authorization, request)
@@ -350,9 +354,25 @@ async def list_users(
     page_size = min(max(1, page_size), 100)
     skip = (page - 1) * page_size
 
-    # Get total count and users
-    total = await users.count_documents({})
-    user_docs = await users.find().skip(skip).limit(page_size).to_list(length=page_size)
+    # Build query filter
+    query = {}
+
+    # Add search filter (case-insensitive regex on email, name, customer_id)
+    if search:
+        search_regex = {"$regex": search, "$options": "i"}
+        query["$or"] = [
+            {"email": search_regex},
+            {"name": search_regex},
+            {"customer_id": search_regex}
+        ]
+
+    # Add role filter
+    if role:
+        query["role"] = role
+
+    # Get total count and users with filters
+    total = await users.count_documents(query)
+    user_docs = await users.find(query).skip(skip).limit(page_size).to_list(length=page_size)
 
     # Convert to response format
     user_responses = [
@@ -369,7 +389,14 @@ async def list_users(
 
     logger.info(
         "Users listed",
-        extra={"page": page, "page_size": page_size, "total": total, **get_client_info(request)}
+        extra={
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "search": search,
+            "role_filter": role,
+            **get_client_info(request)
+        }
     )
 
     return UserListResponse(

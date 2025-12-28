@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import { Notifications } from './Notifications'
+import { SearchBar } from './SearchBar'
 import { UserTable } from './UserTable'
 import { UserFormModal } from './UserFormModal'
 import { DeleteConfirmModal } from './DeleteConfirmModal'
@@ -17,6 +18,8 @@ export function UserManagement() {
   const [page, setPage] = useState(1)
   const [totalUsers, setTotalUsers] = useState(0)
   const [validationError, setValidationError] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
   const pageSize = 20
 
   // Form state
@@ -30,13 +33,13 @@ export function UserManagement() {
 
   useEffect(() => {
     loadUsers()
-  }, [page])
+  }, [page, searchTerm, roleFilter])
 
   const loadUsers = async () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await api.getUsers(page, pageSize)
+      const data = await api.getUsers(page, pageSize, searchTerm, roleFilter)
       setUsers(data.users)
       setTotalUsers(data.total)
     } catch (err) {
@@ -44,6 +47,16 @@ export function UserManagement() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSearchChange = (value) => {
+    setSearchTerm(value)
+    setPage(1) // Reset to page 1 when searching
+  }
+
+  const handleRoleChange = (value) => {
+    setRoleFilter(value)
+    setPage(1) // Reset to page 1 when filtering
   }
 
   const validateCustomerId = (customerId, role) => {
@@ -190,6 +203,13 @@ export function UserManagement() {
       </div>
 
       <Notifications successMessage={successMessage} error={error} />
+
+      <SearchBar
+        searchTerm={searchTerm}
+        roleFilter={roleFilter}
+        onSearchChange={handleSearchChange}
+        onRoleChange={handleRoleChange}
+      />
 
       <UserTable
         users={users}

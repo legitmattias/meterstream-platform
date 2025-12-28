@@ -77,8 +77,11 @@ class ApiClient {
   }
 
   // Admin user management endpoints
-  async getUsers(page = 1, pageSize = 20) {
-    return this.request(`/auth/users?page=${page}&page_size=${pageSize}`)
+  async getUsers(page = 1, pageSize = 20, search = '', role = '') {
+    let url = `/auth/users?page=${page}&page_size=${pageSize}`
+    if (search) url += `&search=${encodeURIComponent(search)}`
+    if (role) url += `&role=${encodeURIComponent(role)}`
+    return this.request(url)
   }
 
   async createUser(userData) {
