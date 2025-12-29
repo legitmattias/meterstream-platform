@@ -506,9 +506,7 @@ deploy-influx-staging:
 # InfluxDB Read Replica - CQRS read instance (Queries/Grafana read from here)
 deploy-influx-read-staging:
   extends: .deploy-base
-  needs:
-    - job: deploy-influx-staging
-      optional: true  # Can deploy independently if write instance already exists
+  needs: []  # No build dependency - uses stock influxdb image
   script:
     # Create InfluxDB READ instance secret from CI/CD variables
     # Uses same org/bucket but different token for security
@@ -534,11 +532,7 @@ deploy-influx-read-staging:
 # Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
 setup-influx-replication-staging:
   extends: .deploy-base
-  needs:
-    - job: deploy-influx-staging
-      optional: true
-    - job: deploy-influx-read-staging
-      optional: true
+  needs: []  # Runtime checks verify both instances are running
   script:
     # Verify both instances are running
     - require_statefulset influxdb
@@ -561,9 +555,7 @@ setup-influx-replication-staging:
 # Grafana - Metrics visualization (depends on: InfluxDB READ instance for CQRS)
 deploy-grafana-staging:
   extends: .deploy-base
-  needs:
-    - job: deploy-influx-read-staging
-      optional: true  # Can deploy if read instance already exists
+  needs: []  # Runtime check verifies influxdb-read is running
   script:
     # Verify required dependencies are running (CQRS: read from read instance)
     - require_statefulset influxdb-read
@@ -610,8 +602,6 @@ deploy-queries-staging:
   needs:
     - job: build-queries
       optional: true
-    - job: deploy-influx-read-staging
-      optional: true  # Can deploy if read instance already exists
   script:
     # Verify required dependencies are running (CQRS: read from read instance)
     - require_statefulset influxdb-read
@@ -820,9 +810,7 @@ deploy-influx-prod:
 # InfluxDB Read Replica - CQRS read instance (Queries/Grafana read from here)
 deploy-influx-read-prod:
   extends: .deploy-base-prod
-  needs:
-    - job: deploy-influx-prod
-      optional: true
+  needs: []  # No build dependency - uses stock influxdb image
   script:
     # Create InfluxDB READ instance secret from CI/CD variables
     - |
@@ -845,11 +833,7 @@ deploy-influx-read-prod:
 # Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
 setup-influx-replication-prod:
   extends: .deploy-base-prod
-  needs:
-    - job: deploy-influx-prod
-      optional: true
-    - job: deploy-influx-read-prod
-      optional: true
+  needs: []  # Runtime checks verify both instances are running
   script:
     - require_statefulset influxdb
     - require_statefulset influxdb-read
@@ -865,9 +849,7 @@ setup-influx-replication-prod:
 # Grafana - Metrics visualization (depends on: InfluxDB READ instance for CQRS)
 deploy-grafana-prod:
   extends: .deploy-base-prod
-  needs:
-    - job: deploy-influx-read-prod
-      optional: true
+  needs: []  # Runtime check verifies influxdb-read is running
   script:
     - require_statefulset influxdb-read
 
@@ -1035,8 +1017,6 @@ deploy-queries-prod:
   extends: .deploy-base-prod
   needs:
     - job: build-queries
-      optional: true
-    - job: deploy-influx-read-prod
       optional: true
   script:
     - require_statefulset influxdb-read
