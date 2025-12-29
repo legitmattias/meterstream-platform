@@ -21,7 +21,8 @@ from .jwt_service import (
     hash_password,
     verify_password,
     verify_token,
-    verify_refresh_token
+    verify_refresh_token,
+    create_access_token
 )
 from .mongodb import get_users_collection, get_refresh_tokens_collection
 from .auth_helpers import (
@@ -172,7 +173,7 @@ async def logout(
         # Revoke all user's refresh tokens
         count = await revoke_all_user_refresh_tokens(user_id, refresh_tokens)
         logger.info(
-            f"All user refresh tokens revoked (count: {count})",
+            f"All refresh tokens for user revoked (count: {count})",
             extra={"user_id": user_id, **get_client_info(request)}
         )
 
