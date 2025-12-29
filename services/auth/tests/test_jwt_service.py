@@ -107,8 +107,8 @@ class TestJWTTokens:
 
         _, expires_in = create_access_token(user_id, email, role)
 
-        # Should be around 60 minutes (3600 seconds) by default
-        assert expires_in == 3600
+        # Should be 15 minutes (900 seconds) by default (reduced for auto-refresh security)
+        assert expires_in == 900
 
     def test_token_with_customer_id(self):
         """Test creating and verifying token with customer_id."""
