@@ -192,6 +192,7 @@ async def logout(
 @limiter.limit("5/hour")  # Max 5 refresh requests per hour per IP (access tokens expire every 60 min)
 async def refresh(
     request: Request,
+    response: Response,
     token_data: RefreshTokenRequest,
     users=Depends(get_users_collection),
     refresh_tokens=Depends(get_refresh_tokens_collection)
@@ -200,6 +201,7 @@ async def refresh(
     Get new access token using refresh token.
 
     Validates refresh token against database and creates new access token.
+    Sets the new access token as HttpOnly cookie.
     """
     # Verify refresh token JWT
     user_id = verify_refresh_token(token_data.refresh_token)
@@ -241,6 +243,17 @@ async def refresh(
             "user_id": user_id,
             **get_client_info(request)
         }
+    )
+
+    # Set the new access token as HttpOnly cookie
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=900,  # 15 minutes
+        path="/"
     )
 
     return TokenPairResponse(
