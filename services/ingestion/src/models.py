@@ -12,15 +12,15 @@ class MeterReading(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     timestamp: dt = Field(..., alias="DateTime")
-    customer: str = Field(..., alias="CUSTOMER")
-    area: str = Field(..., alias="AREA")
-    power_consumption: float = Field(..., alias="Power_Consumption")
+    customer: str = Field(..., alias="CUSTOMER", min_length=1, max_length=50)
+    area: str = Field(..., alias="AREA", min_length=1, max_length=100)
+    power_consumption: float = Field(..., alias="Power_Consumption", ge=0, le=10_000_000)
 
 
 class MeterReadingBatch(BaseModel):
     """Batch of meter readings for ingestion."""
 
-    readings: list[MeterReading]
+    readings: list[MeterReading] = Field(..., min_length=1, max_length=10_000)
 
 
 class HealthResponse(BaseModel):

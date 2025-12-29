@@ -55,14 +55,54 @@ class TestMeterReading:
                 # Missing AREA and Power_Consumption
             )
 
+    def test_customer_too_long(self):
+        """Test that customer field over 50 chars is rejected."""
+        with pytest.raises(Exception):
+            MeterReading(
+                DateTime=datetime(2020, 1, 1, 0, 0, 0),
+                CUSTOMER="x" * 51,
+                AREA="Kvarnholmen",
+                Power_Consumption=0.0112,
+            )
+
+    def test_area_too_long(self):
+        """Test that area field over 100 chars is rejected."""
+        with pytest.raises(Exception):
+            MeterReading(
+                DateTime=datetime(2020, 1, 1, 0, 0, 0),
+                CUSTOMER="1060598736",
+                AREA="x" * 101,
+                Power_Consumption=0.0112,
+            )
+
+    def test_negative_power_consumption(self):
+        """Test that negative power consumption is rejected."""
+        with pytest.raises(Exception):
+            MeterReading(
+                DateTime=datetime(2020, 1, 1, 0, 0, 0),
+                CUSTOMER="1060598736",
+                AREA="Kvarnholmen",
+                Power_Consumption=-1.0,
+            )
+
+    def test_power_consumption_above_limit(self):
+        """Test that power consumption above 10M is rejected."""
+        with pytest.raises(Exception):
+            MeterReading(
+                DateTime=datetime(2020, 1, 1, 0, 0, 0),
+                CUSTOMER="1060598736",
+                AREA="Kvarnholmen",
+                Power_Consumption=10_000_001,
+            )
+
 
 class TestMeterReadingBatch:
     """Tests for MeterReadingBatch model."""
 
-    def test_empty_batch(self):
-        """Test creating an empty batch."""
-        batch = MeterReadingBatch(readings=[])
-        assert len(batch.readings) == 0
+    def test_empty_batch_rejected(self):
+        """Test that empty batch is rejected (min_length=1)."""
+        with pytest.raises(Exception):
+            MeterReadingBatch(readings=[])
 
     def test_batch_with_readings(self):
         """Test creating a batch with readings."""
