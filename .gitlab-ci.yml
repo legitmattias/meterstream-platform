@@ -115,6 +115,12 @@ test-gateway:
     GRAFANA_SERVICE_URL: "http://mock-grafana:3000"
     INGESTION_SERVICE_URL: "http://mock-ingestion:8000"
 
+test-queries:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: queries
+    INFLUX_TOKEN: "test-token"
+
 # ==============================================================================
 # BUILD
 # ==============================================================================
@@ -197,6 +203,9 @@ build-gateway:
 
 build-queries:
   extends: .build
+  needs:
+    - job: test-queries
+      optional: true
   variables:
     SERVICE_NAME: queries
 
