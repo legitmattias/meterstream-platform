@@ -478,7 +478,7 @@ deploy-ingress-staging:
   rules:
     - when: manual
 
-# InfluxDB - Time-series database
+# InfluxDB - Time-series database (WRITE instance for CQRS)
 deploy-influx-staging:
   extends: .deploy-base
   needs: []  # No build dependency - uses stock influxdb image
@@ -495,7 +495,7 @@ deploy-influx-staging:
         --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$STAG_INFLUXDB_INIT_RETENTION" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Apply InfluxDB manifests
+    # Apply InfluxDB manifests (WRITE instance)
     - kubectl -n meterstream apply -f k8s/influx/influx.yaml
 
     # Wait for StatefulSet to be ready (max 3 minutes)
@@ -503,16 +503,74 @@ deploy-influx-staging:
   rules:
     - when: manual
 
-# Grafana - Metrics visualization (depends on: InfluxDB)
+# InfluxDB Read Replica - CQRS read instance (Queries/Grafana read from here)
+deploy-influx-read-staging:
+  extends: .deploy-base
+  needs:
+    - job: deploy-influx-staging
+      optional: true  # Can deploy independently if write instance already exists
+  script:
+    # Create InfluxDB READ instance secret from CI/CD variables
+    # Uses same org/bucket but different token for security
+    - |
+      kubectl -n meterstream create secret generic influxdb-read-init \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$STAG_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$STAG_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$STAG_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$STAG_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$STAG_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$STAG_INFLUXDB_READ_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$STAG_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Apply InfluxDB READ replica manifests
+    - kubectl -n meterstream apply -f k8s/influx/influx-read.yaml
+
+    # Wait for StatefulSet to be ready (max 3 minutes)
+    - kubectl -n meterstream rollout status statefulset/influxdb-read --timeout=180s
+  rules:
+    - when: manual
+
+# Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
+setup-influx-replication-staging:
+  extends: .deploy-base
+  needs:
+    - job: deploy-influx-staging
+      optional: true
+    - job: deploy-influx-read-staging
+      optional: true
+  script:
+    # Verify both instances are running
+    - require_statefulset influxdb
+    - require_statefulset influxdb-read
+
+    # Delete any previous job run (idempotent)
+    - kubectl -n meterstream delete job setup-influx-replication --ignore-not-found=true
+
+    # Apply the replication setup job
+    - kubectl -n meterstream apply -f k8s/influx/replication-job.yaml
+
+    # Wait for job to complete (max 2 minutes)
+    - kubectl -n meterstream wait --for=condition=complete job/setup-influx-replication --timeout=120s
+
+    # Show job logs
+    - kubectl -n meterstream logs job/setup-influx-replication
+  rules:
+    - when: manual
+
+# Grafana - Metrics visualization (depends on: InfluxDB READ instance for CQRS)
 deploy-grafana-staging:
   extends: .deploy-base
-  needs: []  # No build dependency - uses stock grafana image
+  needs:
+    - job: deploy-influx-read-staging
+      optional: true  # Can deploy if read instance already exists
   script:
-    # Verify required dependencies are running
-    - require_statefulset influxdb
+    # Verify required dependencies are running (CQRS: read from read instance)
+    - require_statefulset influxdb-read
 
     # Create datasource secret with token substituted by shell
     # (Grafana does NOT substitute env vars in secureJsonData)
+    # CQRS: Points to READ instance, not write instance
     - |
       kubectl -n meterstream apply -f - <<EOF
       apiVersion: v1
@@ -527,7 +585,7 @@ deploy-grafana-staging:
               uid: influxdb
               type: influxdb
               access: proxy
-              url: http://influxdb:8086
+              url: http://influxdb-read:8086
               isDefault: true
               jsonData:
                 version: Flux
@@ -535,7 +593,7 @@ deploy-grafana-staging:
                 defaultBucket: meterstream
                 httpMode: POST
               secureJsonData:
-                token: "${STAG_INFLUXDB_INIT_ADMIN_TOKEN}"
+                token: "${STAG_INFLUXDB_READ_TOKEN}"
       EOF
 
     # Apply Grafana manifests (service, deployment, dashboard configmaps)
@@ -546,15 +604,17 @@ deploy-grafana-staging:
   rules:
     - when: manual
 
-# Queries - Analytics data queries (depends on: InfluxDB)
+# Queries - Analytics data queries (depends on: InfluxDB READ instance for CQRS)
 deploy-queries-staging:
   extends: .deploy-base
   needs:
     - job: build-queries
       optional: true
+    - job: deploy-influx-read-staging
+      optional: true  # Can deploy if read instance already exists
   script:
-    # Verify required dependencies are running
-    - require_statefulset influxdb
+    # Verify required dependencies are running (CQRS: read from read instance)
+    - require_statefulset influxdb-read
 
     # Apply manifests (service, deployment)
     - kubectl apply -f k8s/queries/ -n meterstream
@@ -736,7 +796,7 @@ deploy-nats-prod:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
-# InfluxDB - Time-series database
+# InfluxDB - Time-series database (WRITE instance for CQRS)
 deploy-influx-prod:
   extends: .deploy-base-prod
   script:
@@ -757,11 +817,86 @@ deploy-influx-prod:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
       when: manual
 
-# Grafana - Metrics visualization (depends on: InfluxDB)
-deploy-grafana-prod:
+# InfluxDB Read Replica - CQRS read instance (Queries/Grafana read from here)
+deploy-influx-read-prod:
   extends: .deploy-base-prod
+  needs:
+    - job: deploy-influx-prod
+      optional: true
+  script:
+    # Create InfluxDB READ instance secret from CI/CD variables
+    - |
+      kubectl -n meterstream create secret generic influxdb-read-init \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$PROD_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$PROD_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$PROD_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$PROD_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$PROD_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$PROD_INFLUXDB_READ_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$PROD_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    - kubectl -n meterstream apply -f k8s/influx/influx-read.yaml
+    - kubectl -n meterstream rollout status statefulset/influxdb-read --timeout=180s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
+setup-influx-replication-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: deploy-influx-prod
+      optional: true
+    - job: deploy-influx-read-prod
+      optional: true
   script:
     - require_statefulset influxdb
+    - require_statefulset influxdb-read
+
+    - kubectl -n meterstream delete job setup-influx-replication --ignore-not-found=true
+    - kubectl -n meterstream apply -f k8s/influx/replication-job.yaml
+    - kubectl -n meterstream wait --for=condition=complete job/setup-influx-replication --timeout=120s
+    - kubectl -n meterstream logs job/setup-influx-replication
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Grafana - Metrics visualization (depends on: InfluxDB READ instance for CQRS)
+deploy-grafana-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: deploy-influx-read-prod
+      optional: true
+  script:
+    - require_statefulset influxdb-read
+
+    # Create datasource secret pointing to READ instance
+    - |
+      kubectl -n meterstream apply -f - <<EOF
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: grafana-datasource-secret
+      stringData:
+        datasources.yaml: |
+          apiVersion: 1
+          datasources:
+            - name: InfluxDB
+              uid: influxdb
+              type: influxdb
+              access: proxy
+              url: http://influxdb-read:8086
+              isDefault: true
+              jsonData:
+                version: Flux
+                organization: meterstream
+                defaultBucket: meterstream
+                httpMode: POST
+              secureJsonData:
+                token: "${PROD_INFLUXDB_READ_TOKEN}"
+      EOF
+
     - kubectl apply -f k8s/grafana/ -n meterstream
     - kubectl -n meterstream rollout status deploy/grafana --timeout=120s
   rules:
@@ -895,14 +1030,16 @@ deploy-ingress-prod:
       when: manual
 
 
-# Queries - Analytics data queries (depends on: InfluxDB)
+# Queries - Analytics data queries (depends on: InfluxDB READ instance for CQRS)
 deploy-queries-prod:
   extends: .deploy-base-prod
   needs:
     - job: build-queries
       optional: true
+    - job: deploy-influx-read-prod
+      optional: true
   script:
-    - require_statefulset influxdb
+    - require_statefulset influxdb-read
 
     - kubectl apply -f k8s/queries/ -n meterstream
 
