@@ -38,11 +38,7 @@ export function AuthProvider({ children }) {
   }
 
   const logout = async () => {
-    try {
-      await api.request('/auth/logout', { method: 'POST' })
-    } catch (error) {
-      console.error('Logout request failed:', error)
-    }
+    await api.logout()
     setUser(null)
     window.location.href = '/login'
   }
