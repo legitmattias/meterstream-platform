@@ -4,13 +4,6 @@ from datetime import datetime, UTC
 
 
 # Request models (vad API:et tar emot)
-class UserRegister(BaseModel):
-    """ Model for user registration posts """
-    email: EmailStr
-    password: str = Field(..., min_length=8)
-    name: str = Field(..., min_length=2)
-
-
 class UserLogin(BaseModel):
     """ Model for user login posts """
     email: EmailStr
@@ -21,7 +14,7 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     """Model for user data in API responses (register, login, refresh)"""
     id: str
-    email: EmailStr
+    email: str  # Use str instead of EmailStr to allow test emails like staff@test.local
     name: str
     created_at: datetime
     role: str = "customer"
@@ -46,7 +39,7 @@ class VerifyResponse(BaseModel):
 # Database model (hur det sparas i MongoDB)
 class UserInDB(BaseModel):
     """Model for user document stored in MongoDB"""
-    email: EmailStr
+    email: str  # Use str instead of EmailStr to allow test emails like staff@test.local
     hashed_password: str
     name: str
     role: str = "customer"
@@ -72,9 +65,32 @@ class HealthResponse(BaseModel):
     service: str = "auth"
 
 
+# ============================================================================
+# ADMIN USER MANAGEMENT MODELS
+# ============================================================================
 
-# class TokenResponse(BaseModel):
-#     """Model for single access token response (deprecated - use TokenPairResponse)"""
-#     access_token: str
-#     token_type: str = "bearer"
-#     expires_in: int
+class AdminUserCreate(BaseModel):
+    """Model for admin creating a new user (bypasses normal registration)"""
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    name: str = Field(..., min_length=2)
+    role: str = Field(default="customer", pattern="^(customer|admin|internal|device)$")
+    customer_id: Optional[str] = None
+
+
+class AdminUserUpdate(BaseModel):
+    """Model for admin updating user fields (all fields optional)"""
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8)
+    name: Optional[str] = Field(None, min_length=2)
+    role: Optional[str] = Field(None, pattern="^(customer|admin|internal|device)$")
+    customer_id: Optional[str] = None
+
+
+class UserListResponse(BaseModel):
+    """Model for paginated user list response"""
+    users: list[UserResponse]
+    total: int
+    page: int
+    page_size: int
+
