@@ -6,18 +6,22 @@ This module contains reusable helper functions for:
 - User retrieval and validation
 - Token pair creation
 - Client information extraction
+- Refresh token storage and revocation
 """
 
 import logging
 from typing import Optional
+from datetime import datetime, UTC
 from fastapi import HTTPException, Request, status
 from bson import ObjectId
 from bson.errors import InvalidId
 
 from .jwt_service import verify_token, create_access_token, create_refresh_token
 from .models import TokenPairResponse
+from .config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def extract_token(authorization: Optional[str], request: Request) -> Optional[str]:
@@ -205,3 +209,80 @@ def create_token_pair(user_id: str, email: str, role: str, customer_id: Optional
         refresh_token=refresh_token,
         expires_in=expires_in
     )
+
+
+async def store_refresh_token(refresh_token: str, user_id: str, refresh_tokens_collection) -> None:
+    """
+    Store a refresh token in the database.
+
+    Args:
+        refresh_token: The refresh token to store
+        user_id: User's MongoDB ObjectId as string
+        refresh_tokens_collection: MongoDB refresh_tokens collection
+    """
+    from datetime import timedelta
+
+    expires_at = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_expire_days)
+
+    await refresh_tokens_collection.insert_one({
+        "token": refresh_token,
+        "user_id": user_id,
+        "created_at": datetime.now(UTC),
+        "expires_at": expires_at,
+        "revoked": False
+    })
+
+
+async def revoke_refresh_token(refresh_token: str, refresh_tokens_collection) -> bool:
+    """
+    Revoke a refresh token by marking it as revoked in the database.
+
+    Args:
+        refresh_token: The refresh token to revoke
+        refresh_tokens_collection: MongoDB refresh_tokens collection
+
+    Returns:
+        bool: True if token was found and revoked, False otherwise
+    """
+    result = await refresh_tokens_collection.update_one(
+        {"token": refresh_token},
+        {"$set": {"revoked": True, "revoked_at": datetime.now(UTC)}}
+    )
+    return result.modified_count > 0
+
+
+async def is_refresh_token_valid(refresh_token: str, refresh_tokens_collection) -> bool:
+    """
+    Check if a refresh token is valid (exists and not revoked).
+
+    Args:
+        refresh_token: The refresh token to validate
+        refresh_tokens_collection: MongoDB refresh_tokens collection
+
+    Returns:
+        bool: True if token is valid, False otherwise
+    """
+    token_doc = await refresh_tokens_collection.find_one({
+        "token": refresh_token,
+        "revoked": False,
+        "expires_at": {"$gt": datetime.now(UTC)}
+    })
+    return token_doc is not None
+
+
+async def revoke_all_user_refresh_tokens(user_id: str, refresh_tokens_collection) -> int:
+    """
+    Revoke all refresh tokens for a specific user.
+
+    Args:
+        user_id: User's MongoDB ObjectId as string
+        refresh_tokens_collection: MongoDB refresh_tokens collection
+
+    Returns:
+        int: Number of tokens revoked
+    """
+    result = await refresh_tokens_collection.update_many(
+        {"user_id": user_id, "revoked": False},
+        {"$set": {"revoked": True, "revoked_at": datetime.now(UTC)}}
+    )
+    return result.modified_count

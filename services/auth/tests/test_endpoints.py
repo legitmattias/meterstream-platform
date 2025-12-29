@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 
 from src.auth_router import router as auth_router
 from src.jwt_service import create_access_token
-from src.mongodb import get_users_collection
+from src.mongodb import get_users_collection, get_refresh_tokens_collection
 from src.models import HealthResponse
 from src.config import get_settings
 
@@ -58,14 +58,30 @@ def mock_users_collection():
 
 
 @pytest.fixture
-def client(mock_users_collection):
+def mock_refresh_tokens_collection():
+    """Mock refresh_tokens collection."""
+    collection = AsyncMock()
+    # Set default return values
+    collection.find_one = AsyncMock(return_value=None)
+    collection.insert_one = AsyncMock()
+    collection.update_one = AsyncMock()
+    collection.update_many = AsyncMock()
+    return collection
+
+
+@pytest.fixture
+def client(mock_users_collection, mock_refresh_tokens_collection):
     """Test client with mocked database dependency."""
-    # Create async function that returns the mock collection
+    # Create async functions that return the mock collections
     async def get_mock_users_collection():
         return mock_users_collection
 
-    # Override the dependency
+    async def get_mock_refresh_tokens_collection():
+        return mock_refresh_tokens_collection
+
+    # Override the dependencies
     app_for_testing.dependency_overrides[get_users_collection] = get_mock_users_collection
+    app_for_testing.dependency_overrides[get_refresh_tokens_collection] = get_mock_refresh_tokens_collection
 
     # Create test client
     with TestClient(app_for_testing, raise_server_exceptions=False) as test_client:

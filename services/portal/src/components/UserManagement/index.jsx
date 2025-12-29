@@ -5,6 +5,7 @@ import { SearchBar } from './SearchBar'
 import { UserTable } from './UserTable'
 import { UserFormModal } from './UserFormModal'
 import { DeleteConfirmModal } from './DeleteConfirmModal'
+import { RevokeSessionsModal } from './RevokeSessionsModal'
 import { Pagination } from './Pagination'
 
 export function UserManagement() {
@@ -15,6 +16,7 @@ export function UserManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [deletingUser, setDeletingUser] = useState(null)
+  const [revokingUser, setRevokingUser] = useState(null)
   const [page, setPage] = useState(1)
   const [totalUsers, setTotalUsers] = useState(0)
   const [validationError, setValidationError] = useState('')
@@ -142,6 +144,20 @@ export function UserManagement() {
     }
   }
 
+  const handleRevokeUserSessions = async () => {
+    if (!revokingUser) return
+
+    try {
+      const result = await api.revokeUserSessions(revokingUser.id)
+      const userName = revokingUser.name
+      setRevokingUser(null)
+      showSuccess(`Revoked ${result.revoked_count} session(s) for "${userName}"`)
+    } catch (err) {
+      setError('Failed to revoke sessions: ' + err.message)
+      setRevokingUser(null)
+    }
+  }
+
   const showSuccess = (message) => {
     setSuccessMessage(message)
     setTimeout(() => setSuccessMessage(''), 3000) // Clear after 3 seconds
@@ -225,6 +241,7 @@ export function UserManagement() {
         users={users}
         onEdit={openEditModal}
         onDelete={setDeletingUser}
+        onRevokeSessions={setRevokingUser}
       />
 
       <Pagination
@@ -251,6 +268,13 @@ export function UserManagement() {
         user={deletingUser}
         onCancel={() => setDeletingUser(null)}
         onConfirm={handleDeleteUser}
+      />
+
+      {/* Revoke Sessions Confirmation Modal */}
+      <RevokeSessionsModal
+        user={revokingUser}
+        onCancel={() => setRevokingUser(null)}
+        onConfirm={handleRevokeUserSessions}
       />
     </div>
   )

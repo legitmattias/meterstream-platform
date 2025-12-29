@@ -23,13 +23,17 @@ from .jwt_service import (
     verify_token,
     verify_refresh_token
 )
-from .mongodb import get_users_collection
+from .mongodb import get_users_collection, get_refresh_tokens_collection
 from .auth_helpers import (
     extract_token,
     verify_admin_access,
     get_client_info,
     get_user_by_id,
-    create_token_pair
+    create_token_pair,
+    store_refresh_token,
+    revoke_refresh_token,
+    is_refresh_token_valid,
+    revoke_all_user_refresh_tokens
 )
 
 logger = logging.getLogger(__name__)
@@ -46,13 +50,20 @@ limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/login", response_model=TokenPairResponse)
 @limiter.limit("10/minute")  # Max 10 login attempts per minute per IP
-async def login(request: Request, response: Response, user_data: UserLogin, users=Depends(get_users_collection)):
+async def login(
+    request: Request,
+    response: Response,
+    user_data: UserLogin,
+    users=Depends(get_users_collection),
+    refresh_tokens=Depends(get_refresh_tokens_collection)
+):
     """
     Login and receive JWT token.
 
     - Verifies email exists
     - Verifies password
     - Returns JWT token
+    - Stores refresh token in database
 
     Security: Uses constant-time comparison to prevent timing attacks
     """
@@ -92,6 +103,9 @@ async def login(request: Request, response: Response, user_data: UserLogin, user
         customer_id=user.get("customer_id")
     )
 
+    # Store refresh token in database
+    await store_refresh_token(tokens.refresh_token, user_id, refresh_tokens)
+
     # Audit log for successful login
     logger.info(
         "Successful login",
@@ -109,7 +123,7 @@ async def login(request: Request, response: Response, user_data: UserLogin, user
         httponly=True,        # Cannot be read by JavaScript
         secure=False,          # False for HTTP, True for HTTPS
         samesite="lax",       # CSRF protection
-        max_age=3600,         # 1 hour (match JWT expiry)
+        max_age=900,          # 15 minutes (match JWT expiry)
         path="/"
     )
 
@@ -118,13 +132,50 @@ async def login(request: Request, response: Response, user_data: UserLogin, user
 
 @router.post("/logout")
 @limiter.limit("30/minute")
-async def logout(request: Request, response: Response):
+async def logout(
+    request: Request,
+    response: Response,
+    authorization: Optional[str] = Header(None),
+    refresh_tokens=Depends(get_refresh_tokens_collection)
+):
     """
-    Logout user by clearing authentication cookie.
+    Logout user by clearing authentication cookie and revoking all refresh tokens.
+
+    Accepts refresh_token in request body (optional).
+    If provided, revokes that specific token. Otherwise, revokes all tokens for the user.
 
     Returns:
         Success message
     """
+    # Extract access token to identify the user
+    access_token = extract_token(authorization, request)
+    user_id = None
+
+    if access_token:
+        payload = verify_token(access_token)
+        if payload:
+            user_id = payload.get("user_id")
+
+    # Get refresh token from request body if provided
+    try:
+        body = await request.json()
+        refresh_token = body.get("refresh_token")
+    except Exception:
+        refresh_token = None
+
+    # Revoke tokens
+    if refresh_token:
+        # Revoke specific refresh token
+        await revoke_refresh_token(refresh_token, refresh_tokens)
+        logger.info("Refresh token revoked", extra=get_client_info(request))
+    elif user_id:
+        # Revoke all user's refresh tokens
+        count = await revoke_all_user_refresh_tokens(user_id, refresh_tokens)
+        logger.info(
+            f"All user refresh tokens revoked (count: {count})",
+            extra={"user_id": user_id, **get_client_info(request)}
+        )
+
     # Clear the access_token cookie
     response.delete_cookie(key="access_token", path="/")
 
@@ -139,34 +190,43 @@ async def logout(request: Request, response: Response):
 
 @router.post("/refresh", response_model=TokenPairResponse)
 @limiter.limit("5/hour")  # Max 5 refresh requests per hour per IP (access tokens expire every 60 min)
-async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depends(get_users_collection)):
+async def refresh(
+    request: Request,
+    token_data: RefreshTokenRequest,
+    users=Depends(get_users_collection),
+    refresh_tokens=Depends(get_refresh_tokens_collection)
+):
     """
     Get new access token using refresh token.
 
-    TODO: SECURITY - Implement Refresh Token Rotation
-    Current: Refresh tokens can be reused unlimited times for 7 days
-    Problem: Stolen token = attacker can generate unlimited JWTs for 7 days
-    Solution: One-time use refresh tokens
-      - Each refresh token can only be used ONCE
-      - Returns new access token + NEW refresh token
-      - Reuse detection = security alert + revoke all user tokens
-      - Requires: MongoDB collection to track used tokens
-    Or remove refresh token??
+    Validates refresh token against database and creates new access token.
     """
-    # Verify refresh token
+    # Verify refresh token JWT
     user_id = verify_refresh_token(token_data.refresh_token)
     if not user_id:
-        logger.warning("Invalid refresh token attempt", extra=get_client_info(request))
+        logger.warning("Invalid refresh token JWT", extra=get_client_info(request))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
 
+    # Check if refresh token is valid in database (not revoked)
+    is_valid = await is_refresh_token_valid(token_data.refresh_token, refresh_tokens)
+    if not is_valid:
+        logger.warning(
+            "Refresh token revoked or not found",
+            extra={"user_id": user_id, **get_client_info(request)}
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked"
+        )
+
     # Get user with validation
     user = await get_user_by_id(user_id, users, request)
 
-    # Create new tokens
-    tokens = create_token_pair(
+    # Create new access token (keep same refresh token)
+    access_token, expires_in = create_access_token(
         user_id=user_id,
         email=user["email"],
         role=user.get("role", "customer"),
@@ -183,7 +243,11 @@ async def refresh(request: Request, token_data: RefreshTokenRequest, users=Depen
         }
     )
 
-    return tokens
+    return TokenPairResponse(
+        access_token=access_token,
+        refresh_token=token_data.refresh_token,  # Return same refresh token
+        expires_in=expires_in
+    )
 
 @router.get("/me", response_model=UserResponse)
 @limiter.limit("30/minute")  # Max 30 requests per minute per IP
@@ -533,16 +597,68 @@ async def update_user(
         customer_id=updated_user.get("customer_id")
     )
 
+@router.post("/users/{user_id}/revoke-sessions")
+@limiter.limit("10/minute")
+async def revoke_user_sessions(
+    request: Request,
+    user_id: str,
+    authorization: Optional[str] = Header(None),
+    users=Depends(get_users_collection),
+    refresh_tokens=Depends(get_refresh_tokens_collection)
+):
+    """
+    Revoke all active sessions (refresh tokens) for a user. Admin only.
+
+    Forces the user to re-authenticate on all devices after their current
+    access token expires (max 15 minutes).
+
+    Use cases:
+    - Suspicious activity detected
+    - User reports compromised account
+    - Before password reset
+    - Compliance/audit requirements
+    """
+    # Verify admin access
+    admin_payload = await verify_admin_access(authorization, request)
+
+    # Validate that user exists
+    user = await get_user_by_id(user_id, users, request)
+
+    # Revoke all refresh tokens for this user
+    revoked_count = await revoke_all_user_refresh_tokens(user_id, refresh_tokens)
+
+    logger.info(
+        "User sessions revoked by admin",
+        extra={
+            "target_user_id": user_id,
+            "target_user_email": user["email"],
+            "revoked_tokens": revoked_count,
+            "admin_id": admin_payload.get("user_id"),
+            **get_client_info(request)
+        }
+    )
+
+    return {
+        "message": f"Revoked {revoked_count} active session(s)",
+        "revoked_count": revoked_count,
+        "user_email": user["email"]
+    }
+
+
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("10/minute")
 async def delete_user(
     request: Request,
     user_id: str,
     authorization: Optional[str] = Header(None),
-    users=Depends(get_users_collection)
+    users=Depends(get_users_collection),
+    refresh_tokens=Depends(get_refresh_tokens_collection)
 ):
     """
     Delete a user by ID. Admin only.
+
+    SECURITY: Also revokes all refresh tokens for the user to prevent
+    deleted users from accessing the system with existing tokens.
     """
     # Verify admin access
     admin_payload = await verify_admin_access(authorization, request)
@@ -569,11 +685,16 @@ async def delete_user(
             detail="User not found"
         )
 
+    # SECURITY: Revoke all refresh tokens for deleted user
+    # This prevents the user from using existing tokens after deletion
+    revoked_count = await revoke_all_user_refresh_tokens(user_id, refresh_tokens)
+
     logger.info(
         "User deleted",
         extra={
             "deleted_user_id": user_id,
             "admin_id": admin_payload.get("user_id"),
+            "revoked_tokens": revoked_count,
             **get_client_info(request)
         }
     )
