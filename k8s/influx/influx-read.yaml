@@ -1,0 +1,104 @@
+# ==============================================================================
+# CQRS: InfluxDB Read Replica
+# ==============================================================================
+# This is the READ instance for CQRS separation.
+# - Processor writes to influxdb (write instance)
+# - Queries/Grafana read from influxdb-read (this instance)
+# - Edge Data Replication syncs data from write to read instance
+# ==============================================================================
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: influxdb-read
+spec:
+  serviceName: influxdb-read
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influxdb-read
+  template:
+    metadata:
+      labels:
+        app: influxdb-read
+    spec:
+      containers:
+      - name: influxdb
+        image: influxdb:2.7
+        ports:
+        - containerPort: 8086
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8086
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8086
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        env:
+        - name: DOCKER_INFLUXDB_INIT_MODE
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-read-init
+              key: DOCKER_INFLUXDB_INIT_MODE
+        - name: DOCKER_INFLUXDB_INIT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-read-init
+              key: DOCKER_INFLUXDB_INIT_USERNAME
+        - name: DOCKER_INFLUXDB_INIT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-read-init
+              key: DOCKER_INFLUXDB_INIT_PASSWORD
+        - name: DOCKER_INFLUXDB_INIT_ORG
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-read-init
+              key: DOCKER_INFLUXDB_INIT_ORG
+        - name: DOCKER_INFLUXDB_INIT_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-read-init
+              key: DOCKER_INFLUXDB_INIT_BUCKET
+        - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-read-init
+              key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+        - name: DOCKER_INFLUXDB_INIT_RETENTION
+          valueFrom:
+            secretKeyRef:
+              name: influxdb-read-init
+              key: DOCKER_INFLUXDB_INIT_RETENTION
+        volumeMounts:
+        - name: influxdb-read-storage
+          mountPath: /var/lib/influxdb2
+  volumeClaimTemplates:
+  - metadata:
+      name: influxdb-read-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb-read
+spec:
+  selector:
+    app: influxdb-read
+  ports:
+    - port: 8086
+      targetPort: 8086
