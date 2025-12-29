@@ -532,9 +532,11 @@ deploy-influx-read-staging:
 # Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
 setup-influx-replication-staging:
   extends: .deploy-base
-  needs: []  # Runtime checks verify both instances are running
+  needs:
+    - deploy-influx-staging
+    - deploy-influx-read-staging
   script:
-    # Verify both instances are running
+    # Verify both instances are running (safety check)
     - require_statefulset influxdb
     - require_statefulset influxdb-read
 
@@ -833,8 +835,11 @@ deploy-influx-read-prod:
 # Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
 setup-influx-replication-prod:
   extends: .deploy-base-prod
-  needs: []  # Runtime checks verify both instances are running
+  needs:
+    - deploy-influx-prod
+    - deploy-influx-read-prod
   script:
+    # Verify both instances are running (safety check)
     - require_statefulset influxdb
     - require_statefulset influxdb-read
 

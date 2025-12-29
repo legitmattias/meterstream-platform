@@ -50,58 +50,68 @@ spec:
             echo "Read instance is healthy."
             echo ""
 
-            # Check if replication already exists
+            # Check if replication already exists (table output: ID is first column)
             echo "Checking for existing replication configuration..."
-            EXISTING_REPLICATION=$(influx replication list \
+            if influx replication list \
               --host http://influxdb:8086 \
               --token "$INFLUX_WRITE_TOKEN" \
-              --json 2>/dev/null | grep -c '"name":"meterstream-replication"' || echo "0")
-
-            if [ "$EXISTING_REPLICATION" != "0" ]; then
+              --org "$INFLUX_ORG" \
+              --hide-headers 2>/dev/null | grep -q "meterstream-replication"; then
               echo "Replication 'meterstream-replication' already exists. Nothing to do."
               echo ""
               echo "Current replication status:"
               influx replication list \
                 --host http://influxdb:8086 \
-                --token "$INFLUX_WRITE_TOKEN"
+                --token "$INFLUX_WRITE_TOKEN" \
+                --org "$INFLUX_ORG"
               exit 0
             fi
+            echo "No existing replication found."
 
-            # Check if remote already exists
+            # Get the remote organization ID (needed for remote connection)
+            # Table output format: ID <tab> Name
+            echo "Getting organization ID from read instance..."
+            REMOTE_ORG_ID=$(influx org list \
+              --host http://influxdb-read:8086 \
+              --token "$INFLUX_READ_TOKEN" \
+              --hide-headers | cut -f1)
+            echo "Remote org ID: $REMOTE_ORG_ID"
+            echo ""
+
+            # Check if remote already exists and get its ID
             echo "Checking for existing remote configuration..."
             EXISTING_REMOTE=$(influx remote list \
               --host http://influxdb:8086 \
               --token "$INFLUX_WRITE_TOKEN" \
-              --json 2>/dev/null | grep -c '"name":"read-replica"' || echo "0")
+              --org "$INFLUX_ORG" \
+              --hide-headers 2>/dev/null | grep "read-replica" || true)
 
-            if [ "$EXISTING_REMOTE" = "0" ]; then
+            if [ -z "$EXISTING_REMOTE" ]; then
               echo "Creating remote connection to read instance..."
               REMOTE_ID=$(influx remote create \
                 --host http://influxdb:8086 \
                 --token "$INFLUX_WRITE_TOKEN" \
+                --org "$INFLUX_ORG" \
                 --name read-replica \
                 --remote-url http://influxdb-read:8086 \
                 --remote-api-token "$INFLUX_READ_TOKEN" \
-                --remote-org-id "$INFLUX_ORG" \
-                --json | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+                --remote-org-id "$REMOTE_ORG_ID" \
+                --hide-headers | cut -f1)
               echo "Remote created with ID: $REMOTE_ID"
             else
-              echo "Remote 'read-replica' already exists, getting its ID..."
-              REMOTE_ID=$(influx remote list \
-                --host http://influxdb:8086 \
-                --token "$INFLUX_WRITE_TOKEN" \
-                --json | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-              echo "Using existing remote ID: $REMOTE_ID"
+              REMOTE_ID=$(echo "$EXISTING_REMOTE" | cut -f1)
+              echo "Remote 'read-replica' already exists with ID: $REMOTE_ID"
             fi
             echo ""
 
-            # Get the local bucket ID
+            # Get the local bucket ID (table output: ID is first column)
             echo "Getting local bucket ID for '$INFLUX_BUCKET'..."
             BUCKET_ID=$(influx bucket list \
               --host http://influxdb:8086 \
               --token "$INFLUX_WRITE_TOKEN" \
+              --org "$INFLUX_ORG" \
               --name "$INFLUX_BUCKET" \
-              --json | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+              --hide-headers | cut -f1)
             echo "Bucket ID: $BUCKET_ID"
             echo ""
 
@@ -110,6 +120,7 @@ spec:
             influx replication create \
               --host http://influxdb:8086 \
               --token "$INFLUX_WRITE_TOKEN" \
+              --org "$INFLUX_ORG" \
               --name meterstream-replication \
               --remote-id "$REMOTE_ID" \
               --local-bucket-id "$BUCKET_ID" \
@@ -121,7 +132,8 @@ spec:
             echo "Replication status:"
             influx replication list \
               --host http://influxdb:8086 \
-              --token "$INFLUX_WRITE_TOKEN"
+              --token "$INFLUX_WRITE_TOKEN" \
+              --org "$INFLUX_ORG"
 
         env:
         # Write instance credentials (from existing secret)
