@@ -25,7 +25,8 @@ export function Dashboard() {
   const [logs, setLogs] = useState([])
 
   // Dashboard state
-  const [selectedYear] = useState('All')
+  // Default to 2023 data (data CSV ranges 2020-2023)
+  const [selectedYear] = useState('2023')
   const [selectedMonth] = useState(MONTHS[0])
   const [selectedDay] = useState(null)
   const [weekSeries, setWeekSeries] = useState([])
@@ -141,7 +142,7 @@ export function Dashboard() {
     return (
       <div className="dashboard-container">
         <header className="dashboard-header">
-          <h1>Your Analytics</h1>
+          <h1>Mina Sidor</h1>
           <div className="user-info">
             <span>{user?.email}</span>
             <button onClick={logout}>Logout</button>
