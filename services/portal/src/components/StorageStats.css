@@ -1,4 +1,4 @@
-.pipeline-section {
+.storage-section {
   background: white;
   border-radius: 8px;
   padding: 1.5rem;
@@ -6,27 +6,27 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.pipeline-section h3 {
+.storage-section h3 {
   margin: 0 0 1rem 0;
   font-size: 1rem;
   color: #374151;
   font-weight: 600;
 }
 
-.pipeline-grid {
+.storage-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
 }
 
 @media (max-width: 768px) {
-  .pipeline-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .storage-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 480px) {
-  .pipeline-grid {
+  .storage-grid {
     grid-template-columns: 1fr;
   }
 }
