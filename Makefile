@@ -3,7 +3,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint producer-run producer-staging generate-token peek-kafka extract-small extract-medium extract-large clean integration-test load-interactive load-smoke load-normal load-stress load-spike
+.PHONY: help dev-up dev-down dev-logs nats-status nats-status-raw mongo-up mongo-down mongo-logs ingestion-run ingestion-test ingestion-lint auth-run auth-test gateway-run gateway-test gateway-lint queries-test producer-run producer-staging generate-token peek-kafka extract-small extract-medium extract-large clean integration-test load-interactive load-smoke load-normal load-stress load-spike
 
 help:
 	@echo "MeterStream Development Commands"
@@ -31,6 +31,9 @@ help:
 	@echo "  make gateway-run     Run the API gateway locally"
 	@echo "  make gateway-test    Run gateway tests"
 	@echo "  make gateway-lint    Run linter on gateway"
+	@echo ""
+	@echo "Queries Service:"
+	@echo "  make queries-test    Run queries service tests"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make producer-run      Run test data producer locally (100 readings)"
@@ -128,6 +131,12 @@ gateway-lint:
 	cd services/gateway && \
 	source .venv/bin/activate && \
 	pylint src/ tests/
+
+# Queries Service
+queries-test:
+	cd services/queries && \
+	source .venv/bin/activate && \
+	pytest tests/ -v
 
 # Test data producer
 producer-run:
