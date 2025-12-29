@@ -4,54 +4,11 @@ from datetime import datetime, UTC
 import pytest
 
 from src.models import (
-    UserRegister,
     UserLogin,
     UserResponse,
     VerifyResponse,
     UserInDB
 )
-
-
-class TestUserRegister:
-    """Tests for UserRegister model."""
-
-    def test_valid_user_register(self):
-        """Test creating a valid user registration."""
-        user = UserRegister(
-            email="test@example.com",
-            password="securepass123",
-            name="Test User"
-        )
-        assert user.email == "test@example.com"
-        assert user.password == "securepass123"
-        assert user.name == "Test User"
-
-    def test_invalid_email(self):
-        """Test that invalid email raises error."""
-        with pytest.raises(Exception):
-            UserRegister(
-                email="not-an-email",
-                password="securepass123",
-                name="Test User"
-            )
-
-    def test_password_too_short(self):
-        """Test that password shorter than 8 chars raises error."""
-        with pytest.raises(Exception):
-            UserRegister(
-                email="test@example.com",
-                password="short",
-                name="Test User"
-            )
-
-    def test_name_too_short(self):
-        """Test that name shorter than 2 chars raises error."""
-        with pytest.raises(Exception):
-            UserRegister(
-                email="test@example.com",
-                password="securepass123",
-                name="A"
-            )
 
 
 class TestUserLogin:

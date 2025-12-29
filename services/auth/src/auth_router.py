@@ -8,7 +8,6 @@ from slowapi.util import get_remote_address
 from typing import Optional
 
 from .models import (
-    UserRegister,
     UserLogin,
     UserResponse,
     VerifyResponse,
@@ -43,82 +42,6 @@ limiter = Limiter(key_func=get_remote_address)
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
-
-
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")  # Max 5 registrations per minute per IP
-async def register(request: Request, response: Response, user_data: UserRegister, users=Depends(get_users_collection)):
-    """
-    Register a new user.
-
-    DEPRECATED: This endpoint will be deprecated in favor of admin-created users.
-    Self-registration creates users without proper customer_id assignment.
-    Use POST /auth/users (admin only) for creating users with correct customer_id.
-
-    - Checks if email already exists
-    - Hashes password
-    - Saves user to MongoDB
-    """
-    # TODO: SECURITY - Add input validation if we keep email-based authentication
-    # Currently relying on Pydantic's EmailStr validation
-
-    # Check if user already exists
-    existing_user = await users.find_one({"email": user_data.email})
-    if existing_user:
-        # Audit log for duplicate registration attempt
-        logger.warning(
-            "Duplicate registration attempt",
-            extra={"email": user_data.email, **get_client_info(request)}
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-
-    # Create user document
-    user_doc = {
-        "email": user_data.email,
-        "hashed_password": hash_password(user_data.password),
-        "name": user_data.name,
-        "role": "customer",
-        "customer_id": None,
-        "created_at": datetime.now(UTC)
-    }
-
-    # Insert into database
-    try:
-        result = await users.insert_one(user_doc)
-    except Exception as e:
-        logger.error(
-            "Database error during registration",
-            extra={
-                "error": str(e),
-                "email": user_data.email
-            }
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Registration failed"
-        )
-
-    # Audit log for successful registration
-    logger.info(
-        "User registered successfully",
-        extra={
-            "email": user_data.email,
-            "user_id": str(result.inserted_id),
-            **get_client_info(request)
-        }
-    )
-
-    return UserResponse(
-        id=str(result.inserted_id),
-        email=user_doc["email"],
-        name=user_doc["name"],
-        created_at=user_doc["created_at"],
-        role=user_doc["role"],
-        customer_id=user_doc["customer_id"]
-    )
 
 
 @router.post("/login", response_model=TokenPairResponse)

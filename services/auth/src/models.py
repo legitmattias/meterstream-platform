@@ -4,13 +4,6 @@ from datetime import datetime, UTC
 
 
 # Request models (vad API:et tar emot)
-class UserRegister(BaseModel):
-    """ Model for user registration posts """
-    email: EmailStr
-    password: str = Field(..., min_length=8)
-    name: str = Field(..., min_length=2)
-
-
 class UserLogin(BaseModel):
     """ Model for user login posts """
     email: EmailStr

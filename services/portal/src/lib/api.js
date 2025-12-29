@@ -33,7 +33,7 @@ class ApiClient {
       if (response.status === 401) {
         const currentPath = window.location.pathname
         const isAuthCheck = endpoint === '/auth/me'
-        const isOnAuthPage = currentPath === '/login' || currentPath === '/register'
+        const isOnAuthPage = currentPath === '/login'
 
         if (!isAuthCheck && !isOnAuthPage) {
           window.location.href = '/login'
@@ -64,12 +64,6 @@ class ApiClient {
     })
   }
 
-  async register(email, password, name) {
-    return this.request('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, name }),
-    })
-  }
 
   // Health check
   async health() {
