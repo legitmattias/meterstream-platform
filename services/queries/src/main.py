@@ -245,8 +245,8 @@ async def get_dashboard(
             hourly_data = query_hourly(query_api, customer_id, date)
             hourly = [HourlyData(hour=h["hour"], consumption=h["consumption"]) for h in hourly_data]
 
-        # Query total and average
-        stats = query_total_and_average(query_api, customer_id, year)
+        # Query total and average (scoped to selected month if provided)
+        stats = query_total_and_average(query_api, customer_id, year, month)
 
         # Query yearly monthly totals for an overview chart (months 1..12)
         yearly_months = []
