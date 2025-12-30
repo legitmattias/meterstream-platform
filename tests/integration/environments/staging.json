@@ -52,7 +52,7 @@
     },
     {
       "key": "admin_email",
-      "value": "admin@example.com",
+      "value": "admin@meterstream.com",
       "type": "default",
       "enabled": true
     },
