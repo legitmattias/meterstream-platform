@@ -1,5 +1,4 @@
 import React from 'react'
-import { SummaryCards } from '../components/SummaryCards'
 import { SystemMonitoring } from '../components/SystemMonitoring'
 import { UserManagement } from '../components/UserManagement'
 
@@ -7,10 +6,6 @@ export default function AdminDashboard(props) {
   const {
     user,
     logout,
-    monthTotal,
-    monthAverage,
-    hourlyMax,
-    weekMax,
     activeTab,
     setActiveTab,
     opsGrafanaUrl,
@@ -23,16 +18,6 @@ export default function AdminDashboard(props) {
       <header className="dashboard-header">
         <h1>MeterStream Dashboard</h1>
         <div className="header-actions">
-          {role === 'admin' && (
-            <a
-              className="header-link"
-              href={opsGrafanaUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open Grafana
-            </a>
-          )}
           {role !== 'customer' && (
             <a className="header-link" href="/landing">Back to Landing</a>
           )}
@@ -40,15 +25,6 @@ export default function AdminDashboard(props) {
           <button onClick={logout}>Logout</button>
         </div>
       </header>
-
-      {activeTab === 'analytics' && (
-        <SummaryCards
-          monthTotal={monthTotal}
-          monthAverage={monthAverage}
-          hourlyMax={hourlyMax}
-          weekMax={weekMax}
-        />
-      )}
 
       <div className="tabs">
         {role === 'admin' ? (
@@ -92,17 +68,25 @@ export default function AdminDashboard(props) {
         {(activeTab === 'analytics' || (activeTab === 'overview' && role !== 'admin')) && (
           <div className="tab-content">
             {role !== 'customer' && (
-              <div className="dashboard-section">
-                <h2>Consumer Grafana</h2>
-                <div className="grafana-embed">
-                  <iframe
-                    src={opsGrafanaUrl}
-                    width="100%"
-                    height="400"
-                    frameBorder="0"
-                    title="Consumer Analytics (Grafana)"
-                  ></iframe>
-                </div>
+              <div className="dashboard-section grafana-section">
+                <h2>Consumer Analytics</h2>
+                <p className="grafana-description">
+                  View detailed consumption analytics, trends, and reports in Grafana.
+                  Dashboards include real-time data, historical comparisons, and customer insights.
+                </p>
+                <a
+                  className="grafana-button"
+                  href={opsGrafanaUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className="grafana-button-icon">📊</span>
+                  <span className="grafana-button-text">
+                    <strong>Open Grafana Dashboard</strong>
+                    <small>Opens in a new tab</small>
+                  </span>
+                  <span className="grafana-button-arrow">→</span>
+                </a>
               </div>
             )}
           </div>
