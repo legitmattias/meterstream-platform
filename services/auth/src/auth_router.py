@@ -190,7 +190,7 @@ async def logout(
 
 
 @router.post("/refresh", response_model=TokenPairResponse)
-@limiter.limit("5/hour")  # Max 5 refresh requests per hour per IP (access tokens expire every 60 min)
+@limiter.limit("10/minute")  # Same as login - allows testing while preventing abuse
 async def refresh(
     request: Request,
     response: Response,
