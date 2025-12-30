@@ -198,7 +198,7 @@ export function Dashboard() {
   }, [showComparison, resolvedYear, selectedMonth])
 
   // Computed values for customer view
-  const displayYear = resolvedYear || selectedYear
+  const displayYear = resolvedYear || (selectedYear !== 'latest' ? selectedYear : '')
   const comparisonYear = resolvedYear ? parseInt(resolvedYear) - 1 : null
 
   const peak = useMemo(() => {
@@ -275,7 +275,7 @@ export function Dashboard() {
                 {availableYears && availableYears.length > 0 ? (
                   availableYears.map(y => <option key={y} value={y}>{y}</option>)
                 ) : (
-                  <option value="latest">{displayYear || 'Laddar...'}</option>
+                  <option value="latest">{resolvedYear || 'Laddar...'}</option>
                 )}
               </select>
             </div>
