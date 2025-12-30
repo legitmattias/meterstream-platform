@@ -3,9 +3,20 @@ import { useAuth } from '../contexts/AuthContext'
 import { config } from '../config'
 import { api } from '../lib/api'
 import { MonthBarChart } from '../components/MonthBarChart'
+import { ConsumptionChart } from '../components/ConsumptionChart'
 import AdminDashboard from './AdminDashboard'
 import './Dashboard.css'
-import { MONTHS, DOW, getMostRecentDateForDayLabel } from '../lib/dashboardUtils'
+import {
+  MONTHS,
+  DOW,
+  getMostRecentDateForDayLabel,
+  SWEDISH_MONTHS,
+  SWEDISH_MONTHS_SHORT,
+  LABELS_SV,
+  formatNumber,
+  getSwedishMonthName,
+  findPeak,
+} from '../lib/dashboardUtils'
 
 export function Dashboard() {
   const { user, logout, loading } = useAuth()
@@ -25,9 +36,8 @@ export function Dashboard() {
   const [logs, setLogs] = useState([])
 
   // Dashboard state
-  // Default to latest so server resolves the most recent year for customers
   const [selectedYear, setSelectedYear] = useState('latest')
-  const [selectedMonth] = useState(MONTHS[0])
+  const [selectedMonth, setSelectedMonth] = useState('all') // 'all' or 1-12
   const [selectedDay] = useState(null)
   const [weekSeries, setWeekSeries] = useState([])
   const [monthSeries, setMonthSeries] = useState([])
@@ -38,6 +48,12 @@ export function Dashboard() {
   const [dataError, setDataError] = useState('')
   const [total, setTotal] = useState(null)
   const [average, setAverage] = useState(null)
+  const [resolvedYear, setResolvedYear] = useState(null)
+
+  // Comparison mode
+  const [showComparison, setShowComparison] = useState(false)
+  const [comparisonData, setComparisonData] = useState(null)
+  const [loadingComparison, setLoadingComparison] = useState(false)
 
   // Data quality (admin/internal only)
   useEffect(() => {
@@ -89,14 +105,13 @@ export function Dashboard() {
       setDataError('')
       try {
         const params = new URLSearchParams()
-        // Only send an explicit year when user selected one (not 'latest' or 'All')
         if (selectedYear && selectedYear.toString().toLowerCase() !== 'all' && selectedYear.toString().toLowerCase() !== 'latest') {
           params.set('year', selectedYear)
         }
 
-        const monthIdx = MONTHS.indexOf(selectedMonth)
-        if (monthIdx !== -1 && selectedYear !== 'All') {
-          params.set('month', String(monthIdx + 1))
+        // For customer view, only send month if specific month selected
+        if (selectedMonth !== 'all' && selectedYear !== 'All') {
+          params.set('month', String(selectedMonth))
         }
 
         if (selectedDay) {
@@ -106,11 +121,9 @@ export function Dashboard() {
 
         const data = await api.request(`/data/dashboard?${params}`)
 
-        // If backend returns the resolved year (e.g. latest available year), reflect it
-        // in the UI — but do not overwrite an explicit user selection. This lets the
-        // dropdown default to the backend-resolved latest year while preserving the
-        // user's choice when they manually select a year.
+        // Store resolved year for display
         if (data && typeof data.year !== 'undefined' && data.year !== null) {
+          setResolvedYear(String(data.year))
           if (selectedYear === 'latest' || selectedYear === null || typeof selectedYear === 'undefined') {
             setSelectedYear(String(data.year))
           }
@@ -119,18 +132,15 @@ export function Dashboard() {
         const weekly = (data.weekly_days || []).map(d => ({ label: d.day, value: d.consumption || 0 }))
         setWeekSeries(DOW.map(d => weekly.find(w => w.label === d) || { label: d, value: 0 }))
 
-        setMonthSeries((data.monthly_days || []).map(d => ({ label: String(d.day), value: d.consumption || 0 })))
-        // Yearly months series: expect [{month:1..12, consumption}] from server
+        setMonthSeries((data.monthly_days || []).map(d => ({ day: d.day, consumption: d.consumption || 0 })))
+
+        // Yearly months series
         if (Array.isArray(data.yearly_months)) {
-          const monthNames = MONTHS // reuse MONTHS const (JAN..DEC?)
-          const ym = data.yearly_months.map(m => ({ label: String(m.month), value: m.consumption || 0 }))
-          // If month names are preferred, map labels to short names
-          const labeled = ym.map(item => ({ label: monthNames[item.label - 1] || item.label, value: item.value }))
-          setYearSeries(labeled)
+          setYearSeries(data.yearly_months.map(m => ({ month: m.month, consumption: m.consumption || 0 })))
         } else {
           setYearSeries([])
         }
-        // Available years for this user (server provides list of years present)
+
         setAvailableYears(Array.isArray(data.available_years) ? data.available_years : [])
         setHourlySeries((data.hourly || []).map(h => ({ label: `${h.hour}:00`, value: h.consumption || 0 })))
 
@@ -147,9 +157,71 @@ export function Dashboard() {
     fetchData()
   }, [selectedYear, selectedMonth, selectedDay])
 
+  // Fetch comparison data for previous year
+  useEffect(() => {
+    if (!showComparison || !resolvedYear) {
+      setComparisonData(null)
+      return
+    }
+
+    const prevYear = parseInt(resolvedYear) - 1
+    if (isNaN(prevYear)) {
+      setComparisonData(null)
+      return
+    }
+
+    const fetchComparison = async () => {
+      setLoadingComparison(true)
+      try {
+        const params = new URLSearchParams()
+        params.set('year', String(prevYear))
+        if (selectedMonth !== 'all') {
+          params.set('month', String(selectedMonth))
+        }
+
+        const data = await api.request(`/data/dashboard?${params}`)
+
+        if (selectedMonth === 'all' && Array.isArray(data.yearly_months)) {
+          setComparisonData(data.yearly_months.map(m => ({ month: m.month, consumption: m.consumption || 0 })))
+        } else if (selectedMonth !== 'all') {
+          setComparisonData((data.monthly_days || []).map(d => ({ day: d.day, consumption: d.consumption || 0 })))
+        }
+      } catch (err) {
+        console.error('Failed to load comparison data', err)
+        setComparisonData(null)
+      } finally {
+        setLoadingComparison(false)
+      }
+    }
+
+    fetchComparison()
+  }, [showComparison, resolvedYear, selectedMonth])
+
+  // Computed values for customer view
+  const displayYear = resolvedYear || selectedYear
+  const comparisonYear = resolvedYear ? parseInt(resolvedYear) - 1 : null
+
+  const peak = useMemo(() => {
+    if (selectedMonth === 'all') {
+      return findPeak(yearSeries, 'month')
+    } else {
+      return findPeak(monthSeries, 'day')
+    }
+  }, [yearSeries, monthSeries, selectedMonth])
+
+  const peakLabel = useMemo(() => {
+    if (!peak || !peak.label) return null
+    if (selectedMonth === 'all') {
+      return getSwedishMonthName(peak.label)
+    }
+    return `Dag ${peak.label}`
+  }, [peak, selectedMonth])
+
+  // For admin backward compatibility
   const weekMax = useMemo(() => Math.max(...weekSeries.map(b => b.value), 1), [weekSeries])
   const hourlyMax = useMemo(() => Math.max(...hourlySeries.map(b => b.value), 1), [hourlySeries])
-  const monthTotal = useMemo(() => monthSeries.reduce((s, b) => s + b.value, 0), [monthSeries])
+  const monthSeriesLegacy = useMemo(() => monthSeries.map(d => ({ label: String(d.day), value: d.consumption })), [monthSeries])
+  const monthTotal = useMemo(() => monthSeries.reduce((s, b) => s + b.consumption, 0), [monthSeries])
   const monthAverage = useMemo(
     () => (monthSeries.length ? monthTotal / monthSeries.length : 0),
     [monthSeries, monthTotal]
@@ -162,76 +234,154 @@ export function Dashboard() {
   const opsGrafanaUrl = `${baseGrafanaUrl}?view=ops`
 
   if (loading || activeTab === null) {
-    return <div className="dashboard-loading">Loading…</div>
+    return <div className="dashboard-loading">{LABELS_SV.loading}</div>
   }
 
+  // =====================
+  // CUSTOMER VIEW (Swedish "Mina sidor")
+  // =====================
   if (role === 'customer') {
+    const isMonthlyView = selectedMonth === 'all'
+    const chartData = isMonthlyView ? yearSeries : monthSeries
+    const chartTitle = isMonthlyView
+      ? `${LABELS_SV.monthlyChart} ${displayYear}`
+      : `${LABELS_SV.dailyChart} ${getSwedishMonthName(parseInt(selectedMonth))} ${displayYear}`
+
     return (
-      <div className="dashboard-container">
-        <header className="dashboard-header">
-          <h1>Mina Sidor</h1>
-          <div className="user-info">
-            <span>{user?.email}</span>
-            <button onClick={logout}>Logout</button>
+      <div className="customer-dashboard">
+        <header className="customer-header">
+          <div className="customer-header-left">
+            <span className="customer-logo">⚡</span>
+            <h1>{LABELS_SV.title}</h1>
+          </div>
+          <div className="customer-header-right">
+            <span className="customer-email">{user?.email}</span>
+            <button className="customer-logout-btn" onClick={logout}>
+              {LABELS_SV.logout}
+            </button>
           </div>
         </header>
 
-        <main className="dashboard-content">
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 8}}>
-            <div />
-            <div style={{display:'flex', gap: 12, alignItems:'center'}}>
-              <label style={{fontSize:12, color:'#555'}}>Year:</label>
+        <main className="customer-main">
+          {/* Filters row */}
+          <div className="customer-filters">
+            <div className="customer-filter-group">
+              <label htmlFor="year-select">{LABELS_SV.year}:</label>
               <select
+                id="year-select"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                aria-label="Select year"
               >
-                <option value="latest">Latest</option>
-                {availableYears && availableYears.length > 0 && (
+                {availableYears && availableYears.length > 0 ? (
                   availableYears.map(y => <option key={y} value={y}>{y}</option>)
+                ) : (
+                  <option value="latest">{displayYear || 'Laddar...'}</option>
                 )}
-                <option value="All">All</option>
               </select>
             </div>
+
+            <div className="customer-filter-group">
+              <label htmlFor="month-select">{LABELS_SV.month}:</label>
+              <select
+                id="month-select"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+              >
+                <option value="all">{LABELS_SV.allMonths}</option>
+                {SWEDISH_MONTHS.map((m, idx) => (
+                  <option key={idx + 1} value={idx + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="customer-filter-group comparison-toggle">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showComparison}
+                  onChange={(e) => setShowComparison(e.target.checked)}
+                  disabled={!comparisonYear || !availableYears.includes(String(comparisonYear))}
+                />
+                {LABELS_SV.showPrevYear}
+              </label>
+            </div>
           </div>
 
-          {yearSeries && yearSeries.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <h3 style={{ margin: '8px 0' }}>Year overview</h3>
-              <MonthBarChart data={yearSeries} type="bar" />
-            </div>
-          )}
-
-          <div className="summary-cards compact">
-            <div className="summary-card blue">
-              <div className="summary-label">Total Consumption</div>
-              <div className="summary-value">
-                {total !== null ? `${total.toFixed(0)} kWh` : `${monthTotal.toFixed(0)} kWh`}
+          {/* Summary cards */}
+          <div className="customer-cards">
+            <div className="customer-card card-total">
+              <div className="card-icon">📊</div>
+              <div className="card-content">
+                <span className="card-label">{LABELS_SV.totalConsumption}</span>
+                <span className="card-value">
+                  {total !== null ? `${formatNumber(total, 1)} ${LABELS_SV.unit}` : '-'}
+                </span>
               </div>
             </div>
-            <div className="summary-card purple">
-              <div className="summary-label">Average</div>
-              <div className="summary-value">
-                {average !== null ? `${average.toFixed(0)} kWh/day` : `${monthAverage.toFixed(0)} kWh/day`}
+
+            <div className="customer-card card-average">
+              <div className="card-icon">📈</div>
+              <div className="card-content">
+                <span className="card-label">
+                  {isMonthlyView ? LABELS_SV.averageConsumption : LABELS_SV.averageDaily}
+                </span>
+                <span className="card-value">
+                  {average !== null ? `${formatNumber(average, 1)} ${LABELS_SV.unit}` : '-'}
+                </span>
+              </div>
+            </div>
+
+            <div className="customer-card card-peak">
+              <div className="card-icon">🔥</div>
+              <div className="card-content">
+                <span className="card-label">{LABELS_SV.peakConsumption}</span>
+                <span className="card-value">
+                  {peak && peak.value > 0
+                    ? `${peakLabel}: ${formatNumber(peak.value, 1)} ${LABELS_SV.unit}`
+                    : '-'}
+                </span>
               </div>
             </div>
           </div>
 
+          {/* Error message */}
           {dataError && (
-            <div className="dashboard-error" role="status">
-              Error loading data: {dataError}
+            <div className="customer-error" role="alert">
+              {LABELS_SV.error}: {dataError}
             </div>
           )}
 
-          {loadingData ? (
-            <div className="dashboard-loading-data">Loading data…</div>
-          ) : (
-            <MonthBarChart data={monthSeries} type="bar" />
-          )}
+          {/* Main chart section */}
+          <section className="customer-chart-section">
+            <h2 className="customer-chart-title">{chartTitle}</h2>
+
+            {loadingData || loadingComparison ? (
+              <div className="customer-chart-loading">{LABELS_SV.loading}</div>
+            ) : chartData && chartData.length > 0 ? (
+              <ConsumptionChart
+                data={chartData}
+                comparisonData={showComparison ? comparisonData : null}
+                year={displayYear}
+                comparisonYear={showComparison ? comparisonYear : null}
+                isMonthly={isMonthlyView}
+                height={400}
+              />
+            ) : (
+              <div className="customer-chart-empty">{LABELS_SV.noData}</div>
+            )}
+          </section>
         </main>
+
+        <footer className="customer-footer">
+          <p>Kalmar Energi - Meterstream</p>
+        </footer>
       </div>
     )
   }
+
+  // =====================
+  // ADMIN VIEW (unchanged)
+  // =====================
   return (
     <AdminDashboard
       user={user}
@@ -242,7 +392,7 @@ export function Dashboard() {
       logs={logs}
       topConsumers={topConsumers}
       quality={quality}
-      monthSeries={monthSeries}
+      monthSeries={monthSeriesLegacy}
       weekSeries={weekSeries}
       monthTotal={monthTotal}
       monthAverage={monthAverage}

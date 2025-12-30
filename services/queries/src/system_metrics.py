@@ -121,16 +121,11 @@ async def check_service_health(service_name: str, url: str) -> dict[str, Any]:
 
 async def check_all_services() -> dict[str, dict[str, Any]]:
     """Check health of all services concurrently."""
-    tasks = {
-        name: check_service_health(name, url)
-        for name, url in SERVICES.items()
-    }
-
-    results = {}
-    for name, task in tasks.items():
-        results[name] = await task
-
-    return results
+    names = list(SERVICES.keys())
+    results_list = await asyncio.gather(
+        *[check_service_health(name, url) for name, url in SERVICES.items()]
+    )
+    return dict(zip(names, results_list))
 
 
 async def get_storage_stats() -> dict[str, Any]:
