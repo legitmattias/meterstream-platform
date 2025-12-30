@@ -7,9 +7,6 @@ This document lists potential problems, their causes, and recommended fixes when
 - **Gateway**: exposes `/api/auth/*`, `/api/data/*`, `/api/grafana/*`, `/api/ingest` and proxies them to backend services; it injects `X-User-*` and `X-Customer-ID` headers based on JWT validation (or forwards `X-Customer-ID` in dev-bypass mode).
 - **Queries**: provides analytics routes under `/api/data/*` and expects `X-Customer-ID` header for customer-isolated endpoints.
 
-- **Inconsistent manual fetch in `Register.jsx`**: `Register.jsx` uses a direct `fetch` with a different default URL (`http://localhost:8080`) instead of using the centralized `api` client.
-  - Symptom: Register may call the wrong host/port or omit `/api`, leading to failed registrations in dev.
-  - Fix: Replace the manual fetch with `api.register(email, password, name)` or reference `config.apiBaseUrl` consistently.
 
 - **Queries endpoints require `X-Customer-ID`**: Several data endpoints in `services/queries/src/main.py` raise 403 if `X-Customer-ID` is missing. The Gateway sets `X-Customer-ID` from the JWT payload when present; however admin/internal tokens may not include a `customer_id` claim.
   - Symptom: Admin or internal users get 403 responses for `/api/data/*` calls (top-consumers, logs, dashboard) even though the UI is rendering `AdminDashboard`.
@@ -39,8 +36,6 @@ This document lists potential problems, their causes, and recommended fixes when
 - If any request returns 404, check the full request URL in Network (missing `/api` or wrong host indicates `apiBaseUrl` mismatch).
 
 **Recommended code fixes / improvements**
-- Portal: use centralized `api` client everywhere.
-  - Replace manual `fetch` in `services/portal/src/pages/Register.jsx` with `api.register(...)`.
 - Gateway/Queries: make `X-Customer-ID` optional for system-level endpoints, or add separate admin endpoints:
   - Example: have queries check `X-User-Role` header and, if `admin|internal`, allow global aggregation endpoints.
 - Gateway: keep `disable_auth_for_data` strictly for dev with clear default `False` and documentation.
@@ -51,9 +46,9 @@ This document lists potential problems, their causes, and recommended fixes when
 - Gateway/Queries: `DISABLE_AUTH_FOR_DATA` / `DEV_CUSTOMER_ID` (or similarly named envs) — ensure these are only set in dev.
 
 **Next steps / checklist**
-- [ ] Replace the manual fetch in `Register.jsx` with `api.register(...)`.
 - [ ] Decide whether Queries should allow admin/global views without `X-Customer-ID` and implement a small role check if needed.
 - [ ] Run an end-to-end smoke test (customer, admin, internal) and verify Dashboard, Top Consumers, Logs, and Grafana embeds.
 
 ---
 Generated on December 23, 2025
+

@@ -57,6 +57,8 @@ class DashboardResponse(BaseModel):
     date: str | None  # YYYY-MM-DD if hourly view requested
     weekly_days: list[WeeklyDayData]
     monthly_days: list[MonthlyDayData]
+    yearly_months: list[dict] = []
+    available_years: list[str] = []
     hourly: list[HourlyData]
     total: float
     average: float

@@ -25,13 +25,15 @@ export function Dashboard() {
   const [logs, setLogs] = useState([])
 
   // Dashboard state
-  // Default to 2023 data (data CSV ranges 2020-2023)
-  const [selectedYear] = useState('2023')
+  // Default to latest so server resolves the most recent year for customers
+  const [selectedYear, setSelectedYear] = useState('latest')
   const [selectedMonth] = useState(MONTHS[0])
   const [selectedDay] = useState(null)
   const [weekSeries, setWeekSeries] = useState([])
   const [monthSeries, setMonthSeries] = useState([])
   const [hourlySeries, setHourlySeries] = useState([])
+  const [yearSeries, setYearSeries] = useState([])
+  const [availableYears, setAvailableYears] = useState([])
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
   const [total, setTotal] = useState(null)
@@ -87,7 +89,10 @@ export function Dashboard() {
       setDataError('')
       try {
         const params = new URLSearchParams()
-        if (selectedYear !== 'All') params.set('year', selectedYear)
+        // Only send an explicit year when user selected one (not 'latest' or 'All')
+        if (selectedYear && selectedYear.toString().toLowerCase() !== 'all' && selectedYear.toString().toLowerCase() !== 'latest') {
+          params.set('year', selectedYear)
+        }
 
         const monthIdx = MONTHS.indexOf(selectedMonth)
         if (monthIdx !== -1 && selectedYear !== 'All') {
@@ -101,10 +106,32 @@ export function Dashboard() {
 
         const data = await api.request(`/data/dashboard?${params}`)
 
+        // If backend returns the resolved year (e.g. latest available year), reflect it
+        // in the UI — but do not overwrite an explicit user selection. This lets the
+        // dropdown default to the backend-resolved latest year while preserving the
+        // user's choice when they manually select a year.
+        if (data && typeof data.year !== 'undefined' && data.year !== null) {
+          if (selectedYear === 'latest' || selectedYear === null || typeof selectedYear === 'undefined') {
+            setSelectedYear(String(data.year))
+          }
+        }
+
         const weekly = (data.weekly_days || []).map(d => ({ label: d.day, value: d.consumption || 0 }))
         setWeekSeries(DOW.map(d => weekly.find(w => w.label === d) || { label: d, value: 0 }))
 
         setMonthSeries((data.monthly_days || []).map(d => ({ label: String(d.day), value: d.consumption || 0 })))
+        // Yearly months series: expect [{month:1..12, consumption}] from server
+        if (Array.isArray(data.yearly_months)) {
+          const monthNames = MONTHS // reuse MONTHS const (JAN..DEC?)
+          const ym = data.yearly_months.map(m => ({ label: String(m.month), value: m.consumption || 0 }))
+          // If month names are preferred, map labels to short names
+          const labeled = ym.map(item => ({ label: monthNames[item.label - 1] || item.label, value: item.value }))
+          setYearSeries(labeled)
+        } else {
+          setYearSeries([])
+        }
+        // Available years for this user (server provides list of years present)
+        setAvailableYears(Array.isArray(data.available_years) ? data.available_years : [])
         setHourlySeries((data.hourly || []).map(h => ({ label: `${h.hour}:00`, value: h.consumption || 0 })))
 
         setTotal(typeof data.total === 'number' ? data.total : null)
@@ -150,6 +177,31 @@ export function Dashboard() {
         </header>
 
         <main className="dashboard-content">
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 8}}>
+            <div />
+            <div style={{display:'flex', gap: 12, alignItems:'center'}}>
+              <label style={{fontSize:12, color:'#555'}}>Year:</label>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                aria-label="Select year"
+              >
+                <option value="latest">Latest</option>
+                {availableYears && availableYears.length > 0 && (
+                  availableYears.map(y => <option key={y} value={y}>{y}</option>)
+                )}
+                <option value="All">All</option>
+              </select>
+            </div>
+          </div>
+
+          {yearSeries && yearSeries.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ margin: '8px 0' }}>Year overview</h3>
+              <MonthBarChart data={yearSeries} type="bar" />
+            </div>
+          )}
+
           <div className="summary-cards compact">
             <div className="summary-card blue">
               <div className="summary-label">Total Consumption</div>
@@ -180,7 +232,6 @@ export function Dashboard() {
       </div>
     )
   }
-
   return (
     <AdminDashboard
       user={user}
