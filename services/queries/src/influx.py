@@ -175,23 +175,35 @@ def query_total_and_average(
     query_api: QueryApi,
     customer_id: str | None,
     year: str | None = None,
+    month: int | None = None,
 ) -> dict[str, float]:
-    """Query total and average consumption."""
-    year_filter = ""
+    """Query total and average consumption for a specific year and optionally month."""
+    # Build proper date range based on year and month
     if year and year != "All":
-        year_filter = (
-            f"\n      |> filter(fn: (r) => r._time >= {year}-01-01T00:00:00Z "
-            f"and r._time < {int(year)+1}-01-01T00:00:00Z)"
-        )
+        year_int = int(year)
+        if month:
+            # Specific month
+            start_date = datetime(year_int, month, 1)
+            if month == 12:
+                end_date = datetime(year_int + 1, 1, 1)
+            else:
+                end_date = datetime(year_int, month + 1, 1)
+        else:
+            # Whole year
+            start_date = datetime(year_int, 1, 1)
+            end_date = datetime(year_int + 1, 1, 1)
+        range_clause = f'range(start: {start_date.isoformat()}Z, stop: {end_date.isoformat()}Z)'
+    else:
+        # Fallback to last 365 days if no year specified
+        range_clause = 'range(start: -365d)'
 
     customer_filter = _customer_filter(customer_id)
 
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
-      |> range(start: -365d)
+      |> {range_clause}
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
       {customer_filter}
-      {year_filter}
     '''
 
     tables = query_api.query(flux_query, org=settings.influx_org)
@@ -349,19 +361,15 @@ def query_yearly_months(
 
     customer_filter = _customer_filter(customer_id)
 
+    # Use monthly aggregation with proper date range
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> range(start: {start_date.isoformat()}Z, stop: {end_date.isoformat()}Z)
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
       {customer_filter}
       |> aggregateWindow(every: 1mo, fn: sum, createEmpty: false)
-      |> map(fn: (r) => ({{ month: r._time.month, _value: r._value }}))
-    |> sort(columns: ["month"])
+      |> sort(columns: ["_time"])
     '''
-
-    # Note: The map above uses a conceptual month extraction; if the InfluxDB
-    # version does not support `r._time.month` in map, the aggregation still
-    # returns points we can inspect by timestamp on the Python side.
 
     tables = query_api.query(flux_query, org=settings.influx_org)
 

@@ -31,7 +31,7 @@ const CustomTooltip = ({ active, payload, label, year, isMonthly }) => {
       </p>
       {payload.map((entry, index) => (
         <p key={index} style={{ margin: '4px 0 0', color: entry.color }}>
-          {entry.name}: {formatNumber(entry.value, 1)} kWh
+          {entry.name}: {formatNumber(entry.value, 2)} kWh
         </p>
       ))}
     </div>
@@ -83,7 +83,10 @@ export function ConsumptionChart({
             tick={{ fill: '#6b7280', fontSize: 12 }}
             tickLine={{ stroke: '#e5e7eb' }}
             axisLine={{ stroke: '#e5e7eb' }}
-            tickFormatter={(value) => formatNumber(value)}
+            tickFormatter={(value) => formatNumber(value, 2)}
+            label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { fill: '#6b7280', fontSize: 12 } }}
+            domain={[0, 'auto']}
+            allowDecimals={true}
           />
           <Tooltip
             content={<CustomTooltip year={year} isMonthly={isMonthly} />}

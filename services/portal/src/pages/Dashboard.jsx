@@ -246,8 +246,8 @@ export function Dashboard() {
     const isMonthlyView = selectedMonth === 'all'
     const chartData = isMonthlyView ? yearSeries : monthSeries
     const chartTitle = isMonthlyView
-      ? `${LABELS_SV.monthlyChart} ${displayYear}`
-      : `${LABELS_SV.dailyChart} ${getSwedishMonthName(parseInt(selectedMonth))} ${displayYear}`
+      ? `${displayYear}`
+      : `${getSwedishMonthName(parseInt(selectedMonth))} ${displayYear}`
 
     return (
       <div className="customer-dashboard">
