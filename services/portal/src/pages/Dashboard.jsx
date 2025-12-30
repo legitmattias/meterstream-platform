@@ -251,7 +251,7 @@ export function Dashboard() {
       <div className="customer-dashboard">
         <header className="customer-header">
           <div className="customer-header-left">
-            <span className="customer-logo">⚡</span>
+            <span className="customer-logo">MeterStream</span>
             <h1>{LABELS_SV.title}</h1>
           </div>
           <div className="customer-header-right">
@@ -310,7 +310,6 @@ export function Dashboard() {
           {/* Summary cards */}
           <div className="customer-cards">
             <div className="customer-card card-total">
-              <div className="card-icon">📊</div>
               <div className="card-content">
                 <span className="card-label">{LABELS_SV.totalConsumption}</span>
                 <span className="card-value">
@@ -320,7 +319,6 @@ export function Dashboard() {
             </div>
 
             <div className="customer-card card-average">
-              <div className="card-icon">📈</div>
               <div className="card-content">
                 <span className="card-label">
                   {isMonthlyView ? LABELS_SV.averageConsumption : LABELS_SV.averageDaily}
@@ -332,7 +330,6 @@ export function Dashboard() {
             </div>
 
             <div className="customer-card card-peak">
-              <div className="card-icon">🔥</div>
               <div className="card-content">
                 <span className="card-label">{LABELS_SV.peakConsumption}</span>
                 <span className="card-value">
