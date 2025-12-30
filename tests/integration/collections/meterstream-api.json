@@ -137,7 +137,7 @@
           ]
         },
         {
-          "name": "Get Me Without Auth (KNOWN BUG - returns 200)",
+          "name": "Get Me Without Auth (should fail)",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/api/auth/me"
@@ -147,14 +147,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "// KNOWN BUG: This endpoint returns 200 with user data even without auth",
-                  "// Expected: 401 Unauthorized",
-                  "// Actual: 200 with seeded user data (security issue)",
-                  "// TODO: Fix gateway to require auth for /api/auth/me",
-                  "",
-                  "pm.test('[KNOWN BUG] Should return 401 (currently returns 200)', function () {",
-                  "    // Documenting actual behavior until bug is fixed",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 401]);",
+                  "pm.test('Returns 401 without auth', function () {",
+                  "    pm.response.to.have.status(401);",
                   "});"
                 ],
                 "type": "text/javascript"
