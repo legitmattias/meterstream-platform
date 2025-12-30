@@ -56,6 +56,18 @@
     {
       "key": "timestamp_3",
       "value": ""
+    },
+    {
+      "key": "pipeline_customer_token",
+      "value": ""
+    },
+    {
+      "key": "pipeline_customer_id",
+      "value": "NEWMAN_PIPELINE_TEST"
+    },
+    {
+      "key": "pipeline_customer_user_id",
+      "value": ""
     }
   ],
   "item": [
@@ -656,10 +668,54 @@
     },
     {
       "name": "5. Full Pipeline (Auth → Ingest → Query)",
-      "description": "Tests the complete data flow. Uses ingest_token from Section 4. Customer queries ingested data.",
+      "description": "Tests the complete data flow using a dedicated test customer (NEWMAN_PIPELINE_TEST) to avoid polluting seeded customer data.",
       "item": [
         {
-          "name": "Login Seeded User (for querying)",
+          "name": "Create Pipeline Test Customer (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newman-pipeline-customer@example.com\",\n  \"password\": \"{{test_password}}\",\n  \"name\": \"Newman Pipeline Test Customer\",\n  \"role\": \"customer\",\n  \"customer_id\": \"{{pipeline_customer_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Accept 201 (created) or 400 (already exists from previous run)",
+                  "pm.test('Pipeline customer creation returns 201 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.test('Response contains customer with correct customer_id', function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('id');",
+                  "        pm.expect(jsonData.role).to.eql('customer');",
+                  "        pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Pipeline Test Customer",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/auth/login",
@@ -671,7 +727,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{seeded_user_email}}\",\n  \"password\": \"{{seeded_user_password}}\"\n}"
+              "raw": "{\n  \"email\": \"newman-pipeline-customer@example.com\",\n  \"password\": \"{{test_password}}\"\n}"
             }
           },
           "event": [
@@ -679,22 +735,26 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Seeded user login successful', function () {",
+                  "pm.test('Pipeline customer login successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Token contains customer_id claim', function () {",
+                  "pm.test('Token contains pipeline customer_id', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData).to.have.property('access_token');",
                   "    ",
                   "    // Store token for query tests",
-                  "    pm.collectionVariables.set('seeded_user_token', jsonData.access_token);",
+                  "    pm.collectionVariables.set('pipeline_customer_token', jsonData.access_token);",
                   "    ",
-                  "    // Decode JWT to verify customer_id",
+                  "    // Decode JWT to verify customer_id and extract user ID for cleanup",
                   "    var parts = jsonData.access_token.split('.');",
                   "    var payload = JSON.parse(atob(parts[1]));",
                   "    pm.expect(payload).to.have.property('customer_id');",
-                  "    pm.expect(payload.customer_id).to.eql(pm.environment.get('seeded_user_customer_id'));",
+                  "    pm.expect(payload.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
+                  "    ",
+                  "    // Store user ID (sub) for cleanup in Section 6",
+                  "    pm.collectionVariables.set('pipeline_customer_user_id', payload.sub);",
+                  "    console.log('Stored pipeline customer user ID: ' + payload.sub);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -714,12 +774,12 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{seeded_user_token}}"
+                "value": "Bearer {{pipeline_customer_token}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T08:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    }\n  ]\n}"
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T08:00:00Z\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    }\n  ]\n}"
             }
           },
           "event": [
@@ -763,7 +823,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{seeded_user_token}}"
+                "value": "Bearer {{pipeline_customer_token}}"
               }
             ]
           },
@@ -772,7 +832,7 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "// Set today's date for baseline query",
+                  "// Use current date for testing (pipeline customer has no historical data)",
                   "var now = new Date();",
                   "var year = now.getFullYear();",
                   "var month = String(now.getMonth() + 1).padStart(2, '0');",
@@ -820,7 +880,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"{{timestamp_1}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"{{timestamp_2}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"{{timestamp_3}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"{{timestamp_1}}\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"{{timestamp_2}}\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"{{timestamp_3}}\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
             }
           },
           "event": [
@@ -828,7 +888,7 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "// Generate unique timestamps for this test run (within today)",
+                  "// Generate unique timestamps for this test run",
                   "// Using current time ensures data won't overwrite previous runs",
                   "var now = new Date();",
                   "var baseTime = now.getTime();",
@@ -894,7 +954,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{seeded_user_token}}"
+                "value": "Bearer {{pipeline_customer_token}}"
               }
             ]
           },
@@ -931,9 +991,9 @@
                   "    pm.expect(jsonData).to.have.property('average');",
                   "});",
                   "",
-                  "pm.test('Customer ID matches seeded user', function () {",
+                  "pm.test('Customer ID matches pipeline test customer', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.customer_id).to.eql(pm.environment.get('seeded_user_customer_id'));",
+                  "    pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
                   "});",
                   "",
                   "pm.test('Full pipeline: data increased after ingest', function () {",
@@ -987,7 +1047,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{seeded_user_token}}"
+                "value": "Bearer {{pipeline_customer_token}}"
               }
             ]
           },
@@ -1006,6 +1066,7 @@
                   "    pm.expect(jsonData).to.have.property('period');",
                   "    pm.expect(jsonData).to.have.property('data');",
                   "    pm.expect(jsonData.period).to.eql('daily');",
+                  "    pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -1031,7 +1092,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{seeded_user_token}}"
+                "value": "Bearer {{pipeline_customer_token}}"
               }
             ]
           },
@@ -1050,6 +1111,7 @@
                   "    pm.expect(jsonData).to.have.property('period');",
                   "    pm.expect(jsonData).to.have.property('total');",
                   "    pm.expect(jsonData).to.have.property('average');",
+                  "    pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -1130,7 +1192,7 @@
           ]
         },
         {
-          "name": "Delete Test User",
+          "name": "Delete Device Test User",
           "request": {
             "method": "DELETE",
             "url": "{{base_url}}/api/auth/users/{{user_id}}",
@@ -1146,13 +1208,73 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "// Accept 204 (deleted), 404 (not found), 401/403 (no admin)",
-                  "pm.test('Test user cleanup attempted', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([204, 404, 401, 403]);",
-                  "});",
-                  "",
-                  "if (pm.response.code === 204) {",
-                  "    console.log('Successfully deleted test user');",
+                  "// Skip test if user ID wasn't set",
+                  "var userId = pm.collectionVariables.get('user_id');",
+                  "if (!userId) {",
+                  "    pm.test('Device test user cleanup skipped (not found)', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "} else {",
+                  "    // Accept 204 (deleted), 404 (not found), 401/403 (no admin)",
+                  "    pm.test('Device test user cleanup attempted', function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([204, 404, 401, 403]);",
+                  "    });",
+                  "    ",
+                  "    if (pm.response.code === 204) {",
+                  "        console.log('Successfully deleted device test user');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Pipeline Test Customer",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/auth/users/{{pipeline_customer_user_id}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Skip if user ID wasn't found in lookup",
+                  "var userId = pm.collectionVariables.get('pipeline_customer_user_id');",
+                  "if (!userId) {",
+                  "    console.log('No pipeline customer user ID found, skipping delete');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Skip test if user ID wasn't set",
+                  "var userId = pm.collectionVariables.get('pipeline_customer_user_id');",
+                  "if (!userId) {",
+                  "    pm.test('Pipeline test customer cleanup skipped (not found)', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "} else {",
+                  "    // Accept 204 (deleted), 404 (not found), 401/403 (no admin)",
+                  "    pm.test('Pipeline test customer cleanup attempted', function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([204, 404, 401, 403]);",
+                  "    });",
+                  "    ",
+                  "    if (pm.response.code === 204) {",
+                  "        console.log('Successfully deleted pipeline test customer');",
+                  "    }",
                   "}"
                 ],
                 "type": "text/javascript"

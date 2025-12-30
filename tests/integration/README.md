@@ -40,8 +40,8 @@ newman run tests/integration/collections/meterstream-api.json \
 | 2. Unauthenticated Error Cases | Ingest/query/auth without credentials |
 | 3. Auth Flow | Admin creates device user, login, refresh token, logout |
 | 4. Ingestion | Device user + internal user ingest data |
-| 5. Full Pipeline | Internal user ingests, customer queries |
-| 6. Cleanup | Delete created device user (admin) |
+| 5. Full Pipeline | Create test customer, internal user ingests, test customer queries |
+| 6. Cleanup | Delete created device user and pipeline test customer (admin) |
 
 ## Full Pipeline Tests
 
@@ -51,17 +51,21 @@ The **Full Pipeline** tests verify complete data flow through the entire system:
 Auth -> Ingest API -> NATS -> Processor -> InfluxDB -> Query API
 ```
 
-**Test Strategy: Delta-Based Verification with Dynamic Timestamps**
+**Test Strategy: Dedicated Test Customer with Delta-Based Verification**
 
-The test measures the *increase* in data rather than absolute values. This makes it idempotent - it works regardless of existing data from previous test runs.
+The tests use a dedicated test customer (`NEWMAN_PIPELINE_TEST`) to avoid polluting seeded customer data. This keeps test data completely isolated from the data shown in Grafana dashboards and the Portal.
+
+**Why dedicated test customer?** Seeded customers (like Alice) have historical data from 2020-2023 that's visualized in Grafana. Using a separate test customer ensures integration tests don't add 2024/2025 data that would affect dashboards.
 
 **Why dynamic timestamps?** InfluxDB uses timestamps as part of the primary key. Writing to the same timestamp overwrites data instead of adding to it. By using the current time for each test run, we ensure data accumulates rather than being overwritten.
 
-1. **Login seeded customer** user for querying
-2. **Verify customer cannot ingest** (403 Forbidden)
-3. **Query baseline** - Get today's total before ingesting
-4. **Internal user** ingests 3 readings with current timestamps (50.0 + 75.5 + 60.25 = 185.75 kWh)
-5. **Query after ingest** - Verify today's total increased by at least 185.75 kWh
+1. **Admin creates pipeline test customer** (customer_id: `NEWMAN_PIPELINE_TEST`)
+2. **Login test customer** for querying
+3. **Verify customer cannot ingest** (403 Forbidden)
+4. **Query baseline** - Get today's total before ingesting (starts at 0 for new customer)
+5. **Internal user** ingests 3 readings with current timestamps (50.0 + 75.5 + 60.25 = 185.75 kWh)
+6. **Query after ingest** - Verify today's total increased by at least 185.75 kWh
+7. **Test consumption and summary endpoints** with test customer token
 
 This proves the full data flow works because:
 - Ingest API accepted the data (200 response, 3 accepted)
@@ -74,6 +78,7 @@ This proves the full data flow works because:
 - 5s pre-request delay before querying to allow async pipeline processing
 - Dynamic timestamps ensure each test run adds new data (no overwrites)
 - Delta-based assertion handles accumulated data from multiple test runs
+- Test customer is cleaned up in Section 6
 
 ## Environment Variables
 
@@ -81,7 +86,5 @@ This proves the full data flow works because:
 |----------|-------------|
 | `base_url` | API base URL |
 | `test_email` / `test_password` | Internal user for ingestion |
-| `seeded_user_email` / `seeded_user_password` | Customer user for querying |
-| `seeded_user_customer_id` | Customer ID for pipeline tests |
 | `device_email` / `device_password` | Device user for ingestion |
 | `admin_email` / `admin_password` | Admin for user creation/cleanup (pass password via CLI) |
