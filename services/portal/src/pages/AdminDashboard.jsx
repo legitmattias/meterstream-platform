@@ -80,12 +80,10 @@ export default function AdminDashboard(props) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <span className="grafana-button-icon">📊</span>
                   <span className="grafana-button-text">
                     <strong>Open Grafana Dashboard</strong>
                     <small>Opens in a new tab</small>
                   </span>
-                  <span className="grafana-button-arrow">→</span>
                 </a>
               </div>
             )}
