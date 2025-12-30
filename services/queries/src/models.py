@@ -1,6 +1,6 @@
 """Models for query service responses."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ConsumptionDataPoint(BaseModel):
@@ -57,6 +57,8 @@ class DashboardResponse(BaseModel):
     date: str | None  # YYYY-MM-DD if hourly view requested
     weekly_days: list[WeeklyDayData]
     monthly_days: list[MonthlyDayData]
+    yearly_months: list[dict] = Field(default_factory=list)
+    available_years: list[str] = Field(default_factory=list)
     hourly: list[HourlyData]
     total: float
     average: float
@@ -87,11 +89,11 @@ class TopConsumersResponse(BaseModel):
     """Response for top consumers endpoint."""
 
     customer_id: str | None  # None for internal/admin users (global view)
-    consumers: list[ConsumerData] = []
+    consumers: list[ConsumerData] = Field(default_factory=list)
 
 
 class LogsResponse(BaseModel):
     """Simple logs response placeholder."""
 
     customer_id: str | None  # None for internal/admin users (global view)
-    logs: list[str] = []
+    logs: list[str] = Field(default_factory=list)

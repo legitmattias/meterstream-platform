@@ -14,7 +14,7 @@ export function Landing() {
 
   const linksByRole = {
     admin: [
-      { label: 'Ops dashboard', href: `${baseGrafana}?view=ops` },
+      { label: 'Grafana', href: `${baseGrafana}?view=ops` },
       { label: 'Admin analytics', href: '/analytics', internal: true},
 
     ],
@@ -53,23 +53,6 @@ export function Landing() {
             <button className="btn ghost" onClick={handleLogout}>Sign out</button>
           </div>
           <p className="note">Session active. Secure access enforced via gateway.</p>
-        </div>
-        <div className="hero-card">
-          <div className="metric">
-            <span className="label">Live ingestion</span>
-            <span className="value">148.2 kWh</span>
-            <span className="delta up">+4.2% vs hour</span>
-          </div>
-          <div className="metric">
-            <span className="label">Today’s total</span>
-            <span className="value">892 kWh</span>
-            <span className="delta flat">On track</span>
-          </div>
-          <div className="metric">
-            <span className="label">Data quality</span>
-            <span className="value">98.7%</span>
-            <span className="delta up">Stable</span>
-          </div>
         </div>
       </header>
 

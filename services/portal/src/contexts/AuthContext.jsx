@@ -29,12 +29,14 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     await api.login(email, password)
     const userData = await api.request('/auth/me')
-    setUser({
+    const userObj = {
       email: userData.email,
       role: userData.role,
       customerId: userData.customer_id,
-    })  
+    }
+    setUser(userObj)
     setLoading(false)
+    return userObj
   }
 
   const logout = async () => {

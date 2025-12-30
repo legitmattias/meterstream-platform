@@ -8,16 +8,17 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login, isAuthenticated, loading: authLoading } = useAuth()
+  const { login, isAuthenticated, loading: authLoading, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
   // Redirect to dashboard if already logged in
   useEffect(() => {
     if (!authLoading && isAuthenticated()) {
-      navigate('/dashboard', { replace: true })
+      const defaultRoute = user?.role === 'customer' ? '/analytics' : '/dashboard'
+      navigate(defaultRoute, { replace: true })
     }
-  }, [authLoading, isAuthenticated, navigate])
+  }, [authLoading, isAuthenticated, navigate, user])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -25,8 +26,9 @@ export function Login() {
     setLoading(true)
 
     try {
-      await login(email, password)
-      const from = location.state?.from?.pathname || '/dashboard'
+      const loggedIn = await login(email, password)
+      const defaultRoute = loggedIn?.role === 'customer' ? '/analytics' : '/dashboard'
+      const from = location.state?.from?.pathname || defaultRoute
       navigate(from, { replace: true })
     } catch (err) {
       setError(err.message || 'Login failed')

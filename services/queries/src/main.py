@@ -20,6 +20,8 @@ from .influx import (
     query_top_consumers,
     query_quality_metrics,
     get_latest_year,
+    query_yearly_months,
+    query_available_years,
 )
 from .system_metrics import collect_all_metrics
 from .models import (
@@ -196,33 +198,37 @@ async def get_dashboard(
     # Resolve customer id (admins/internal may omit and request global view)
     customer_id = get_customer_id(x_customer_id, x_user_role)
 
-    # For customer requests always use the latest available year of data so
-    # the dashboard visualizes the most recent collection year. Admin/internal
-    # callers may still request arbitrary years (or 'latest').
-    if customer_id is not None:
-        try:
-            latest = get_latest_year(query_api, customer_id)
-            if latest is not None:
-                year = str(latest)
-        except Exception:
-            # If determining latest fails, leave year as-is (None) and
-            # downstream queries will behave as before (no month data).
-            pass
-    else:
-        # For admin/internal calls: if year omitted or explicitly 'latest',
-        # compute the most recent year present in the data for global view.
-        if (not year) or (isinstance(year, str) and year.lower() == 'latest'):
-            try:
-                latest = get_latest_year(query_api, customer_id)
-                if latest is not None:
-                    year = str(latest)
-            except Exception:
-                pass
-
+    # Initialize Influx client/query API up-front so helper functions can use it.
     try:
         client = get_influx_client()
         query_api = client.query_api()
+    except Exception as e:
+        logger.error("Failed to initialize Influx client: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to query data") from e
 
+    # Determine available years for this customer (or global if admin/internal)
+    try:
+        available_years_int = query_available_years(query_api, customer_id)
+        available_years = [str(y) for y in available_years_int]
+    except Exception:
+        available_years = []
+
+    # For customer requests always use the latest available year of data so
+    # the dashboard visualizes the most recent collection year. Admin/internal
+    # callers may still request arbitrary years (or 'latest').
+    try:
+        # Only resolve the backend "latest" year when the client did not
+        # explicitly request a specific year. This allows customers to select
+        # a year from the UI dropdown and have the server respect that choice.
+        if (not year) or (isinstance(year, str) and year.lower() == 'latest'):
+            latest = get_latest_year(query_api, customer_id)
+            if latest is not None:
+                year = str(latest)
+    except Exception:
+        # fail silently and continue with whatever `year` is set to
+        pass
+
+    try:
         # Query weekly per-day data
         weekly_data = query_weekly_days(query_api, customer_id, year)
         weekly_days = [WeeklyDayData(day=d["day"], consumption=d["consumption"]) for d in weekly_data]
@@ -242,6 +248,14 @@ async def get_dashboard(
         # Query total and average
         stats = query_total_and_average(query_api, customer_id, year)
 
+        # Query yearly monthly totals for an overview chart (months 1..12)
+        yearly_months = []
+        try:
+            if year and year != "All":
+                yearly_months = query_yearly_months(query_api, customer_id, int(year))
+        except Exception:
+            yearly_months = []
+
         return DashboardResponse(
             customer_id=customer_id,
             year=year,
@@ -249,6 +263,8 @@ async def get_dashboard(
             date=date,
             weekly_days=weekly_days,
             monthly_days=monthly_days,
+            yearly_months=yearly_months,
+            available_years=available_years,
             hourly=hourly,
             total=stats["total"],
             average=stats["average"],

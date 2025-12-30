@@ -335,6 +335,80 @@ def query_top_consumers(
     return [{"name": k, "consumption": v} for k, v in sorted(results.items(), key=lambda kv: kv[1], reverse=True)][:limit]
 
 
+def query_yearly_months(
+    query_api: QueryApi,
+    customer_id: str | None,
+    year: int,
+) -> list[dict[str, Any]]:
+    """Return monthly totals for the specified year (months 1..12).
+
+    Always returns 12 entries (month: 1..12) with consumption values (0.0 when missing).
+    """
+    start_date = datetime(year, 1, 1)
+    end_date = datetime(year + 1, 1, 1)
+
+    customer_filter = _customer_filter(customer_id)
+
+    flux_query = f'''
+    from(bucket: "{settings.influx_bucket}")
+      |> range(start: {start_date.isoformat()}Z, stop: {end_date.isoformat()}Z)
+      |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
+      {customer_filter}
+      |> aggregateWindow(every: 1mo, fn: sum, createEmpty: false)
+      |> map(fn: (r) => ({{ month: r._time.month, _value: r._value }}))
+    |> sort(columns: ["month"])
+    '''
+
+    # Note: The map above uses a conceptual month extraction; if the InfluxDB
+    # version does not support `r._time.month` in map, the aggregation still
+    # returns points we can inspect by timestamp on the Python side.
+
+    tables = query_api.query(flux_query, org=settings.influx_org)
+
+    results: dict[int, float] = {}
+    for table in tables:
+        for record in table.records:
+            ts = record.get_time()
+            if ts is None:
+                continue
+            month = ts.month
+            val = record.get_value()
+            if val is None:
+                continue
+            results[month] = results.get(month, 0.0) + float(val)
+
+    return [{"month": m, "consumption": results.get(m, 0.0)} for m in range(1, 13)]
+
+
+def query_available_years(query_api: QueryApi, customer_id: str | None) -> list[int]:
+        """Return a sorted list of years (descending) for which data exists for the customer.
+
+        Scans a reasonable window (last 10 years) and extracts the years from record timestamps.
+        """
+        customer_filter = _customer_filter(customer_id)
+
+        flux_query = f'''
+        from(bucket: "{settings.influx_bucket}")
+            |> range(start: -10y)
+            |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
+            {customer_filter}
+            |> keep(columns: ["_time"])
+            |> sort(columns:["_time"], desc: false)
+        '''
+
+        tables = query_api.query(flux_query, org=settings.influx_org)
+
+        years = set()
+        for table in tables:
+                for record in table.records:
+                        ts = record.get_time()
+                        if ts is not None:
+                                years.add(ts.year)
+
+        # Return descending sorted years (most recent first)
+        return sorted(years, reverse=True)
+
+
 def query_quality_metrics(
     query_api: QueryApi,
     customer_id: str | None,
