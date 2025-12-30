@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MeterStream API Integration Tests",
-    "description": "End-to-end API tests for MeterStream pipeline.\n\nTests cover:\n1. Health checks\n2. Unauthenticated error cases (before any login sets cookies)\n3. Authentication flow (register, login, refresh)\n4. Data ingestion\n5. Full pipeline: auth → ingest → query\n6. Cleanup",
+    "description": "End-to-end API tests for MeterStream pipeline.\n\nTests cover:\n1. Health checks\n2. Unauthenticated error cases (before any login sets cookies)\n3. Authentication flow (admin creates device user, login, me, refresh, logout)\n4. Data ingestion (device role + internal role)\n5. Full pipeline: auth → ingest → query\n6. Cleanup (deletes created device user)\n\nNote: Requires ADMIN_PASSWORD env var for user creation/cleanup.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -31,6 +31,30 @@
     },
     {
       "key": "ingest_token",
+      "value": ""
+    },
+    {
+      "key": "baseline_total",
+      "value": "0"
+    },
+    {
+      "key": "test_year",
+      "value": ""
+    },
+    {
+      "key": "test_date",
+      "value": ""
+    },
+    {
+      "key": "timestamp_1",
+      "value": ""
+    },
+    {
+      "key": "timestamp_2",
+      "value": ""
+    },
+    {
+      "key": "timestamp_3",
       "value": ""
     }
   ],
@@ -234,48 +258,7 @@
       "name": "3. Auth Flow",
       "item": [
         {
-          "name": "Register New User",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/auth/register",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\",\n  \"name\": \"Integration Test User\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "// Accept both 201 (new user) and 400 (already exists)",
-                  "pm.test('Register returns 201 or 400', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
-                  "});",
-                  "",
-                  "if (pm.response.code === 201) {",
-                  "    pm.test('Response contains user data', function () {",
-                  "        var jsonData = pm.response.json();",
-                  "        pm.expect(jsonData).to.have.property('id');",
-                  "        pm.expect(jsonData).to.have.property('email');",
-                  "        pm.expect(jsonData).to.have.property('role');",
-                  "        pm.collectionVariables.set('user_id', jsonData.id);",
-                  "    });",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Login New User",
+          "name": "Admin Login (for user creation)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/auth/login",
@@ -287,7 +270,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\"\n}"
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
             }
           },
           "event": [
@@ -295,11 +278,89 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Login successful', function () {",
+                  "pm.test('Admin login successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Response contains tokens', function () {",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('admin_token', jsonData.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Device User (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newman-device-test@example.com\",\n  \"password\": \"{{test_password}}\",\n  \"name\": \"Newman Device Test\",\n  \"role\": \"device\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Accept 201 (created) or 400 (already exists from previous run)",
+                  "pm.test('Device user creation returns 201 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.test('Response contains user with device role', function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('id');",
+                  "        pm.expect(jsonData).to.have.property('email');",
+                  "        pm.expect(jsonData.role).to.eql('device');",
+                  "        pm.collectionVariables.set('user_id', jsonData.id);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Device User",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newman-device-test@example.com\",\n  \"password\": \"{{test_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Device user login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains tokens with device role', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData).to.have.property('access_token');",
                   "    pm.expect(jsonData).to.have.property('refresh_token');",
@@ -308,6 +369,11 @@
                   "    // Store tokens for subsequent requests",
                   "    pm.collectionVariables.set('access_token', jsonData.access_token);",
                   "    pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
+                  "    ",
+                  "    // Verify device role in JWT",
+                  "    var parts = jsonData.access_token.split('.');",
+                  "    var payload = JSON.parse(atob(parts[1]));",
+                  "    pm.expect(payload.role).to.eql('device');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -426,41 +492,10 @@
     },
     {
       "name": "4. Ingestion",
+      "description": "Uses device token from Section 3 (already stored in access_token)",
       "item": [
         {
-          "name": "Login for Ingestion",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/api/auth/login",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\"\n}"
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Login successful', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Ingest Single Reading",
+          "name": "Device Ingest Single Reading",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/ingest",
@@ -484,7 +519,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Ingest successful', function () {",
+                  "pm.test('Device ingest successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
@@ -500,7 +535,7 @@
           ]
         },
         {
-          "name": "Ingest Batch Readings",
+          "name": "Device Ingest Batch Readings",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/ingest",
@@ -524,7 +559,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Batch ingest successful', function () {",
+                  "pm.test('Device batch ingest successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
@@ -537,15 +572,9 @@
               }
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "5. Full Pipeline (Auth → Ingest → Query)",
-      "description": "Tests the complete data flow. Internal user ingests data, customer queries it.",
-      "item": [
+        },
         {
-          "name": "Login Internal User (for ingestion)",
+          "name": "Login Internal User for Ingestion",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/auth/login",
@@ -567,14 +596,12 @@
                 "exec": [
                   "pm.test('Internal user login successful', function () {",
                   "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Token has internal role', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    // Also store for Section 5 pipeline tests",
                   "    pm.collectionVariables.set('ingest_token', jsonData.access_token);",
                   "    ",
-                  "    // Decode JWT to verify role",
+                  "    // Verify internal role",
                   "    var parts = jsonData.access_token.split('.');",
                   "    var payload = JSON.parse(atob(parts[1]));",
                   "    pm.expect(payload.role).to.eql('internal');",
@@ -585,6 +612,52 @@
             }
           ]
         },
+        {
+          "name": "Internal User Ingest Reading",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T14:00:00Z\",\n      \"CUSTOMER\": \"INTERNAL_TEST_001\",\n      \"AREA\": \"integration-test\",\n      \"Power_Consumption\": 88.88\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Internal user ingest successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response confirms accepted count', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accepted');",
+                  "    pm.expect(jsonData.accepted).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Full Pipeline (Auth → Ingest → Query)",
+      "description": "Tests the complete data flow. Uses ingest_token from Section 4. Customer queries ingested data.",
+      "item": [
         {
           "name": "Login Seeded User (for querying)",
           "request": {
@@ -669,6 +742,68 @@
           ]
         },
         {
+          "name": "Get Baseline Dashboard (before ingest)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/data/dashboard?year={{test_year}}&date={{test_date}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "data", "dashboard"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{test_year}}"
+                },
+                {
+                  "key": "date",
+                  "value": "{{test_date}}"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{seeded_user_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Set today's date for baseline query",
+                  "var now = new Date();",
+                  "var year = now.getFullYear();",
+                  "var month = String(now.getMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getDate()).padStart(2, '0');",
+                  "pm.collectionVariables.set('test_year', year);",
+                  "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
+                  "console.log('Querying baseline for date: ' + year + '-' + month + '-' + day);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Baseline query successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Store baseline total for comparison after ingest",
+                  "var jsonData = pm.response.json();",
+                  "var baselineTotal = jsonData.total || 0;",
+                  "pm.collectionVariables.set('baseline_total', baselineTotal);",
+                  "console.log('Baseline total before ingest: ' + baselineTotal);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
           "name": "Ingest Data (with internal role)",
           "request": {
             "method": "POST",
@@ -685,10 +820,40 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T08:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"2025-01-15T09:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"2025-01-15T10:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"{{timestamp_1}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"{{timestamp_2}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"{{timestamp_3}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate unique timestamps for this test run (within today)",
+                  "// Using current time ensures data won't overwrite previous runs",
+                  "var now = new Date();",
+                  "var baseTime = now.getTime();",
+                  "",
+                  "// Create 3 timestamps, each 1 second apart",
+                  "var t1 = new Date(baseTime);",
+                  "var t2 = new Date(baseTime + 1000);",
+                  "var t3 = new Date(baseTime + 2000);",
+                  "",
+                  "pm.collectionVariables.set('timestamp_1', t1.toISOString());",
+                  "pm.collectionVariables.set('timestamp_2', t2.toISOString());",
+                  "pm.collectionVariables.set('timestamp_3', t3.toISOString());",
+                  "",
+                  "// Store today's date for querying",
+                  "var year = now.getFullYear();",
+                  "var month = String(now.getMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getDate()).padStart(2, '0');",
+                  "pm.collectionVariables.set('test_year', year);",
+                  "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
+                  "",
+                  "console.log('Ingesting data with timestamps: ' + t1.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -712,17 +877,17 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/api/data/dashboard?year=2025&date=2025-01-15",
+              "raw": "{{base_url}}/api/data/dashboard?year={{test_year}}&date={{test_date}}",
               "host": ["{{base_url}}"],
               "path": ["api", "data", "dashboard"],
               "query": [
                 {
                   "key": "year",
-                  "value": "2025"
+                  "value": "{{test_year}}"
                 },
                 {
                   "key": "date",
-                  "value": "2025-01-15"
+                  "value": "{{test_date}}"
                 }
               ]
             },
@@ -771,24 +936,32 @@
                   "    pm.expect(jsonData.customer_id).to.eql(pm.environment.get('seeded_user_customer_id'));",
                   "});",
                   "",
-                  "pm.test('Pipeline processed ingested data correctly', function () {",
+                  "pm.test('Full pipeline: data increased after ingest', function () {",
+                  "    // This test verifies the FULL data flow:",
+                  "    // Auth -> Ingest API -> NATS -> Processor -> InfluxDB -> Query API",
                   "    var jsonData = pm.response.json();",
-                  "    // We ingested 50.0, 75.5, 60.25 at consecutive hours",
-                  "    // Hours may shift due to server timezone (CET/CEST)",
-                  "    // Find hours with non-zero consumption",
-                  "    var nonZeroHours = jsonData.hourly.filter(h => h.consumption > 0);",
+                  "    var baseline = parseFloat(pm.collectionVariables.get('baseline_total')) || 0;",
+                  "    var current = jsonData.total;",
+                  "    var expectedIncrease = 185.75; // 50.0 + 75.5 + 60.25",
+                  "    var actualIncrease = current - baseline;",
                   "    ",
-                  "    pm.expect(nonZeroHours.length, 'Should have 3 hours with data').to.eql(3);",
+                  "    console.log('Baseline: ' + baseline + ', Current: ' + current + ', Increase: ' + actualIncrease);",
                   "    ",
-                  "    // Values should appear in order: 50.0, 75.5, 60.25",
-                  "    var values = nonZeroHours.map(h => h.consumption);",
-                  "    pm.expect(values).to.eql([50.0, 75.5, 60.25]);",
+                  "    // Data must have increased by at least the sum of ingested values",
+                  "    // This proves data flowed through entire pipeline",
+                  "    if (actualIncrease < expectedIncrease) {",
+                  "        pm.expect.fail('Data did not increase by expected amount. ' +",
+                  "            'Expected increase: ' + expectedIncrease + ', Actual: ' + actualIncrease.toFixed(2) + '. ' +",
+                  "            'Pipeline may still be processing. Wait and retry, or check NATS consumer lag.');",
+                  "    }",
+                  "    pm.expect(actualIncrease).to.be.at.least(expectedIncrease);",
                   "});",
                   "",
-                  "pm.test('Total matches sum of ingested values', function () {",
+                  "pm.test('Hourly breakdown has data', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    // Total should be at least 185.75 (50.0 + 75.5 + 60.25)",
-                  "    pm.expect(jsonData.total).to.be.at.least(185.75);",
+                  "    var nonZeroHours = jsonData.hourly.filter(h => h.consumption > 0);",
+                  "    // Should have at least 1 hour with data (timestamps may be in same hour)",
+                  "    pm.expect(nonZeroHours.length).to.be.at.least(1);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -890,7 +1063,7 @@
       "name": "6. Cleanup",
       "item": [
         {
-          "name": "Login as Admin",
+          "name": "Login as Admin (for cleanup)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/api/auth/login",
@@ -922,6 +1095,41 @@
           ]
         },
         {
+          "name": "Lookup Device User for Cleanup",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/users",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var response = pm.response.json();",
+                  "    // Handle both paginated {users: [...]} and direct array responses",
+                  "    var users = response.users || response;",
+                  "    var testUser = users.find(u => u.email === 'newman-device-test@example.com');",
+                  "    if (testUser) {",
+                  "        pm.collectionVariables.set('user_id', testUser.id);",
+                  "        console.log('Found test user to delete: ' + testUser.id);",
+                  "    } else {",
+                  "        console.log('Test user not found (may have been deleted already)');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
           "name": "Delete Test User",
           "request": {
             "method": "DELETE",
@@ -941,7 +1149,11 @@
                   "// Accept 204 (deleted), 404 (not found), 401/403 (no admin)",
                   "pm.test('Test user cleanup attempted', function () {",
                   "    pm.expect(pm.response.code).to.be.oneOf([204, 404, 401, 403]);",
-                  "});"
+                  "});",
+                  "",
+                  "if (pm.response.code === 204) {",
+                  "    console.log('Successfully deleted test user');",
+                  "}"
                 ],
                 "type": "text/javascript"
               }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { ServiceHealthStrip } from './ServiceHealthStrip';
 import { NatsMetrics } from './NatsMetrics';
-import { PipelineStats } from './PipelineStats';
+import { StorageStats } from './StorageStats';
 import './SystemMonitoring.css';
 
 export function SystemMonitoring() {
@@ -63,13 +63,13 @@ export function SystemMonitoring() {
     );
   }
 
-  const { nats, services, pipeline } = metrics || {};
+  const { nats, services, storage } = metrics || {};
 
   return (
     <div className="system-monitoring">
       <ServiceHealthStrip services={services} nats={nats} />
       <NatsMetrics nats={nats} history={history} />
-      <PipelineStats pipeline={pipeline} />
+      <StorageStats storage={storage} />
 
       <div className="last-updated">
         Last updated: {metrics?.timestamp ? new Date(metrics.timestamp).toLocaleString() : 'N/A'}

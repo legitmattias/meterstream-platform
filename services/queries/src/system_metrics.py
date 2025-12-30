@@ -133,71 +133,98 @@ async def check_all_services() -> dict[str, dict[str, Any]]:
     return results
 
 
-# Cache for expensive total count query
-_pipeline_cache = {"total": 0, "last_updated": None}
+async def get_storage_stats() -> dict[str, Any]:
+    """Get data storage and replication statistics.
 
-
-async def get_pipeline_stats() -> dict[str, Any]:
-    """Get pipeline statistics from InfluxDB."""
-    global _pipeline_cache
-
+    Fetches replication stats from the write instance to show:
+    - Current replication queue size
+    - Bytes remaining to sync
+    - Sync status (based on latest response code)
+    """
     try:
-        from .influx import get_influx_client
+        # Fetch replication stats from write instance
+        if not settings.influx_write_token:
+            logger.warning("Write instance token not configured, skipping replication stats")
+            return {
+                "replication_queue_bytes": 0,
+                "replication_remaining_bytes": 0,
+                "replication_status": "not_configured",
+                "replication_max_queue_bytes": 0,
+            }
 
-        client = get_influx_client()
-        query_api = client.query_api()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # Get org ID if not configured (replication API requires org ID, not name)
+            org_id = settings.influx_write_org_id
+            if not org_id:
+                orgs_response = await client.get(
+                    f"{settings.influx_write_url}/api/v2/orgs",
+                    headers={"Authorization": f"Token {settings.influx_write_token}"},
+                )
+                orgs_response.raise_for_status()
+                orgs_data = orgs_response.json()
+                orgs = orgs_data.get("orgs", [])
+                if not orgs:
+                    logger.warning("No organizations found on write instance")
+                    return {
+                        "replication_queue_bytes": 0,
+                        "replication_remaining_bytes": 0,
+                        "replication_status": "no_org",
+                        "replication_max_queue_bytes": 0,
+                    }
+                org_id = orgs[0].get("id", "")
 
-        # Only refresh total count every 5 minutes (expensive query)
-        now = datetime.utcnow()
-        should_refresh_total = (
-            _pipeline_cache["last_updated"] is None
-            or (now - _pipeline_cache["last_updated"]).total_seconds() > 300
-        )
+            response = await client.get(
+                f"{settings.influx_write_url}/api/v2/replications",
+                params={"orgID": org_id},
+                headers={"Authorization": f"Token {settings.influx_write_token}"},
+            )
+            response.raise_for_status()
+            data = response.json()
 
-        total_processed = _pipeline_cache["total"]
+            replications = data.get("replications", [])
+            if not replications:
+                return {
+                    "replication_queue_bytes": 0,
+                    "replication_remaining_bytes": 0,
+                    "replication_status": "no_replication",
+                    "replication_max_queue_bytes": 0,
+                }
 
-        if should_refresh_total:
-            # Count last 30 days instead of all time (much faster)
-            total_query = f'''
-            from(bucket: "{settings.influx_bucket}")
-              |> range(start: -30d)
-              |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-              |> group()
-              |> count()
-            '''
+            # Use the first replication (we only have one)
+            repl = replications[0]
+            status_code = repl.get("latestResponseCode", 0)
 
-            total_tables = query_api.query(total_query, org=settings.influx_org)
-            for table in total_tables:
-                for record in table.records:
-                    total_processed = record.get_value() or 0
+            # Determine sync status
+            if status_code == 204:
+                sync_status = "syncing"
+            elif status_code == 0:
+                sync_status = "initializing"
+            else:
+                sync_status = "error"
 
-            _pipeline_cache["total"] = total_processed
-            _pipeline_cache["last_updated"] = now
+            return {
+                "replication_queue_bytes": repl.get("currentQueueSizeBytes", 0),
+                "replication_remaining_bytes": repl.get("remainingBytesToBeSynced", 0),
+                "replication_status": sync_status,
+                "replication_max_queue_bytes": repl.get("maxQueueSizeBytes", 0),
+            }
 
-        # Count last hour (fast query)
-        hour_query = f'''
-        from(bucket: "{settings.influx_bucket}")
-          |> range(start: -1h)
-          |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-          |> group()
-          |> count()
-        '''
-
-        hour_tables = query_api.query(hour_query, org=settings.influx_org)
-        last_hour = 0
-        for table in hour_tables:
-            for record in table.records:
-                last_hour = record.get_value() or 0
-
+    except httpx.RequestError as e:
+        logger.warning("Failed to fetch replication stats: %s", e)
         return {
-            "total_processed": total_processed,
-            "last_hour": last_hour,
+            "replication_queue_bytes": 0,
+            "replication_remaining_bytes": 0,
+            "replication_status": "unreachable",
+            "replication_max_queue_bytes": 0,
+            "error": str(e),
         }
     except Exception as e:
-        logger.error("Failed to get pipeline stats: %s", e)
+        logger.error("Unexpected error fetching storage stats: %s", e)
         return {
-            "total_processed": _pipeline_cache["total"],  # Return cached value on error
-            "last_hour": 0,
+            "replication_queue_bytes": 0,
+            "replication_remaining_bytes": 0,
+            "replication_status": "error",
+            "replication_max_queue_bytes": 0,
             "error": str(e),
         }
 
@@ -207,15 +234,15 @@ async def collect_all_metrics() -> dict[str, Any]:
     # Run all metric collections concurrently
     nats_task = fetch_nats_metrics()
     services_task = check_all_services()
-    pipeline_task = get_pipeline_stats()
+    storage_task = get_storage_stats()
 
-    nats_metrics, services_health, pipeline_stats = await asyncio.gather(
-        nats_task, services_task, pipeline_task
+    nats_metrics, services_health, storage_stats = await asyncio.gather(
+        nats_task, services_task, storage_task
     )
 
     return {
         "nats": nats_metrics,
         "services": services_health,
-        "pipeline": pipeline_stats,
+        "storage": storage_stats,
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }

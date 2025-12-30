@@ -15,7 +15,8 @@ export function Landing() {
   const linksByRole = {
     admin: [
       { label: 'Ops dashboard', href: `${baseGrafana}?view=ops` },
-      { label: 'System health', href: `${baseGrafana}?view=health` },
+      { label: 'Admin analytics', href: '/analytics', internal: true},
+
     ],
     internal: [
       { label: 'Internal dashboard', href: baseGrafana },

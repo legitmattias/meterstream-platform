@@ -34,6 +34,10 @@ class MongoDB:
         """Get the users collection."""
         return self.get_database()["users"]
 
+    def get_refresh_tokens_collection(self):
+        """Get the refresh_tokens collection."""
+        return self.get_database()["refresh_tokens"]
+
 
 # Singleton instance
 mongodb = MongoDB()
@@ -42,3 +46,8 @@ mongodb = MongoDB()
 async def get_users_collection():
     """Dependency for FastAPI routes."""
     return mongodb.get_users_collection()
+
+
+async def get_refresh_tokens_collection():
+    """Dependency for FastAPI routes."""
+    return mongodb.get_refresh_tokens_collection()

@@ -2,7 +2,8 @@
 # ANALYTICS INTEGRATION: Queries Service Deployment
 # ==============================================================================
 # This service provides analytics data queries with customer isolation.
-# Connects to InfluxDB to retrieve time-series meter data.
+# Connects to InfluxDB READ instance for CQRS separation.
+# (Write instance used by Processor, read instance used by Queries/Grafana)
 # ==============================================================================
 
 apiVersion: apps/v1
@@ -35,8 +36,9 @@ spec:
             - containerPort: 8000
               name: http
           env:
+            # CQRS: Point to READ instance (write instance used by Processor)
             - name: INFLUX_URL
-              value: "http://influxdb:8086"
+              value: "http://influxdb-read:8086"
             - name: INFLUX_ORG
               valueFrom:
                 secretKeyRef:
@@ -47,7 +49,16 @@ spec:
                 secretKeyRef:
                   name: influxdb-init
                   key: DOCKER_INFLUXDB_INIT_BUCKET
+            # Use read instance token for authentication
             - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-read-init
+                  key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+            # Write instance (for replication stats in admin dashboard)
+            - name: INFLUX_WRITE_URL
+              value: "http://influxdb:8086"
+            - name: INFLUX_WRITE_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: influxdb-init

@@ -78,8 +78,8 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 12,
-            "w": 17,
+            "h": 14,
+            "w": 23,
             "x": 0,
             "y": 0
           },
@@ -112,7 +112,7 @@ data:
                 "type": "influxdb",
                 "uid": "influxdb"
               },
-              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> group()\r\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n  |> yield(name: \"daily_sum\")\r\n",
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"1d\"\r\nstart = date.truncate(t: v.timeRangeStart, unit: 1d)\r\nstop  = date.truncate(t: v.timeRangeStop, unit: 1d)\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n  |> yield(name: \"daily_sum\")\r\n",
               "refId": "A"
             }
           ],
@@ -127,11 +127,11 @@ data:
         "list": []
       },
       "time": {
-        "from": "2019-12-31T23:00:00.000Z",
-        "to": "2020-01-07T23:00:00.000Z"
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
       },
       "timepicker": {},
-      "timezone": "browser",
+      "timezone": "utc",
       "title": "Landing page",
       "uid": "ff7iuh80yjh8gd",
       "version": 4,
@@ -247,7 +247,7 @@ data:
                 "type": "influxdb",
                 "uid": "influxdb"
               },
-              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => contains(value: r.customer, set: ${customer:json}))\r\n  |> group()\r\n  |> aggregateWindow(\r\n      every: duration(v: \"${interval}\"),\r\n      fn: sum,\r\n      createEmpty: false,\r\n      timeSrc: \"_start\"\r\n    )\r\n",
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"${interval}\"\r\nstart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nstop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n",
               "refId": "A"
             }
           ],
@@ -262,9 +262,9 @@ data:
         "list": [
           {
             "current": {
-              "selected": false,
-              "text": "1060598736",
-              "value": "1060598736"
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
             },
             "datasource": {
               "type": "influxdb",
@@ -273,6 +273,7 @@ data:
             "definition": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)",
             "hide": 0,
             "includeAll": true,
+            "allValue": ".*",
             "multi": true,
             "name": "customer",
             "options": [],
@@ -288,8 +289,8 @@ data:
           {
             "current": {
               "selected": false,
-              "text": "1h",
-              "value": "1h"
+              "text": "1d",
+              "value": "1d"
             },
             "hide": 1,
             "includeAll": false,
@@ -308,8 +309,8 @@ data:
               },
               {
                 "selected": false,
-                "text": "24h",
-                "value": "24h"
+                "text": "1d",
+                "value": "1d"
               },
               {
                 "selected": false,
@@ -332,7 +333,7 @@ data:
                 "value": "365d"
               }
             ],
-            "query": "1h,12h,24h,7d,30d,182d,365d\n",
+            "query": "1h,12h,1d,7d,30d,182d,365d\n",
             "queryValue": "",
             "skipUrlSync": false,
             "type": "custom"
@@ -340,11 +341,11 @@ data:
         ]
       },
       "time": {
-        "from": "2019-12-31T23:00:00.000Z",
-        "to": "2020-01-07T23:00:00.000Z"
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
       },
       "timepicker": {},
-      "timezone": "browser",
+      "timezone": "utc",
       "title": "Aggregated Bar Chart",
       "uid": "af7irczysogzke",
       "version": 7,
@@ -437,8 +438,8 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 15,
-            "w": 21,
+            "h": 14,
+            "w": 23,
             "x": 0,
             "y": 0
           },
@@ -461,7 +462,7 @@ data:
                 "type": "influxdb",
                 "uid": "influxdb"
               },
-              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => contains(value: r.customer, set: ${customer:json}))\r\n  |> group()\r\n  |> aggregateWindow(\r\n      every: duration(v: \"${interval}\"),\r\n      fn: sum,\r\n      createEmpty: false,\r\n      timeSrc: \"_start\"\r\n    )\r\n",
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"${interval}\"\r\nstart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nstop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n",
               "refId": "A"
             }
           ],
@@ -476,9 +477,9 @@ data:
         "list": [
           {
             "current": {
-              "selected": false,
-              "text": "1060598736",
-              "value": "1060598736"
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
             },
             "datasource": {
               "type": "influxdb",
@@ -487,6 +488,7 @@ data:
             "definition": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)",
             "hide": 0,
             "includeAll": true,
+            "allValue": ".*",
             "multi": true,
             "name": "customer",
             "options": [],
@@ -502,8 +504,8 @@ data:
           {
             "current": {
               "selected": false,
-              "text": "1h",
-              "value": "1h"
+              "text": "1d",
+              "value": "1d"
             },
             "hide": 0,
             "includeAll": false,
@@ -522,8 +524,8 @@ data:
               },
               {
                 "selected": false,
-                "text": "24h",
-                "value": "24h"
+                "text": "1d",
+                "value": "1d"
               },
               {
                 "selected": false,
@@ -546,7 +548,7 @@ data:
                 "value": "365d"
               }
             ],
-            "query": "1h,12h,24h,7d,30d,182d,365d",
+            "query": "1h,12h,1d,7d,30d,182d,365d",
             "queryValue": "",
             "skipUrlSync": false,
             "type": "custom"
@@ -554,11 +556,11 @@ data:
         ]
       },
       "time": {
-        "from": "2019-12-31T23:00:00.000Z",
-        "to": "2020-01-07T23:00:00.000Z"
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
       },
       "timepicker": {},
-      "timezone": "browser",
+      "timezone": "utc",
       "title": "Aggregated Line Chart",
       "uid": "df7iuv4kojsowd",
       "version": 4,
@@ -651,8 +653,8 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 8,
-            "w": 12,
+            "h": 14,
+            "w": 23,
             "x": 0,
             "y": 0
           },
@@ -675,8 +677,9 @@ data:
                 "type": "influxdb",
                 "uid": "influxdb"
               },
-              "query": "from(bucket: \"meterstream\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => contains(value: r.customer, set: ${customer:json}))\r\n  |> group()\r\n  |> aggregateWindow(\r\n      every: duration(v: \"${interval}\"),\r\n      fn: sum,\r\n      createEmpty: false,\r\n      timeSrc: \"_start\"\r\n    )\r\n  |> yield(name: \"current\")\r\n",
-              "refId": "A"
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"${interval}\"\r\nstart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nstop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n  |> rename(columns: {_value: \"Aktuell period\"})\r\n  |> keep(columns: [\"_time\", \"Aktuell period\"])\r\n",
+              "refId": "A",
+              "legendFormat": "Aktuell period"
             },
             {
               "datasource": {
@@ -684,8 +687,9 @@ data:
                 "uid": "influxdb"
               },
               "hide": false,
-              "query": "enabled = \"${compare_enabled}\"\r\nshift = duration(v: \"${compare_shift}\")\r\n\r\ncompare =\r\n  from(bucket: \"meterstream\")\r\n    |> range(start: v.timeRangeStart - shift, stop: v.timeRangeStop - shift)\r\n    |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n    |> filter(fn: (r) => r._field == \"power_consumption\")\r\n    |> filter(fn: (r) => contains(value: r.customer, set: ${customer:json}))\r\n    |> group()\r\n    |> aggregateWindow(\r\n        every: duration(v: \"${interval}\"),\r\n        fn: sum,\r\n        createEmpty: false,\r\n        timeSrc: \"_start\"\r\n      )\r\n    |> timeShift(duration: shift)\r\n\r\nif enabled == \"on\" and \"${compare_shift}\" != \"0s\" then\r\n  compare |> yield(name: \"compare\")\r\nelse\r\n  array.from(rows: []) |> yield(name: \"compare\")\r\n",
-              "refId": "B"
+              "query":"import \"array\"\r\nimport \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nenabled = \"${compare_enabled}\"\r\nshift = duration(v: \"${compare_shift}\")\r\nintervalStr = \"${interval}\"\r\n\r\nbaseStart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nbaseStop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\ncompare =\r\n  from(bucket: \"meterstream\")\r\n    |> range(start: date.sub(d: shift, from: baseStart), stop: date.sub(d: shift, from: baseStop))\r\n    |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n    |> filter(fn: (r) => r._field == \"power_consumption\")\r\n    |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n    |> group(columns: [])\r\n    |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n    |> timeShift(duration: shift)\r\n    |> rename(columns: {_value: \"Jämförelseperiod\"})\r\n    |> keep(columns: [\"_time\", \"Jämförelseperiod\"])\r\n\r\nempty = array.from(rows: [{_time: now(), _value: 0.0}])\r\n  |> rename(columns: {_value: \"Jämförelseperiod\"})\r\n  |> keep(columns: [\"_time\", \"Jämförelseperiod\"])\r\n  |> limit(n: 0)\r\n\r\nif enabled == \"on\" and \"${compare_shift}\" != \"0s\" then\r\n  compare\r\nelse\r\n  empty\r\n",
+              "refId": "B",
+              "legendFormat": "Jämförelseperiod"
             }
           ],
           "title": "Overlay Comparison",
@@ -710,6 +714,7 @@ data:
             "definition": "import \"influxdata/influxdb/schema\"\r\n\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)\r\n",
             "hide": 0,
             "includeAll": true,
+            "allValue": ".*",
             "multi": true,
             "name": "customer",
             "options": [],
@@ -724,9 +729,9 @@ data:
           },
           {
             "current": {
-              "selected": false,
-              "text": "1h",
-              "value": "1h"
+              "selected": true,
+              "text": "1d",
+              "value": "1d"
             },
             "hide": 0,
             "includeAll": false,
@@ -734,7 +739,7 @@ data:
             "name": "interval",
             "options": [
               {
-                "selected": true,
+                "selected": false,
                 "text": "1h",
                 "value": "1h"
               },
@@ -744,9 +749,9 @@ data:
                 "value": "12h"
               },
               {
-                "selected": false,
-                "text": "24h",
-                "value": "24h"
+                "selected": true,
+                "text": "1d",
+                "value": "1d"
               },
               {
                 "selected": false,
@@ -769,15 +774,15 @@ data:
                 "value": "365d"
               }
             ],
-            "query": "1h,12h,24h,7d,30d,182d,365d",
+            "query": "1h,12h,1d,7d,30d,182d,365d",
             "skipUrlSync": false,
             "type": "custom"
           },
           {
             "current": {
-              "selected": false,
-              "text": "0s",
-              "value": "0s"
+              "selected": true,
+              "text": "365d",
+              "value": "365d"
             },
             "hide": 0,
             "includeAll": false,
@@ -785,7 +790,7 @@ data:
             "name": "compare_shift",
             "options": [
               {
-                "selected": true,
+                "selected": false,
                 "text": "0s",
                 "value": "0s"
               },
@@ -801,8 +806,8 @@ data:
               },
               {
                 "selected": false,
-                "text": "24h",
-                "value": "24h"
+                "text": "1d",
+                "value": "1d"
               },
               {
                 "selected": false,
@@ -820,20 +825,20 @@ data:
                 "value": "182d"
               },
               {
-                "selected": false,
+                "selected": true,
                 "text": "365d",
                 "value": "365d"
               }
             ],
-            "query": "0s,1h,12h,24h,7d,30d,182d,365d",
+            "query": "0s,1h,12h,1d,7d,30d,182d,365d",
             "skipUrlSync": false,
             "type": "custom"
           },
           {
             "current": {
-              "selected": false,
-              "text": "off",
-              "value": "off"
+              "selected": true,
+              "text": "on",
+              "value": "on"
             },
             "hide": 0,
             "includeAll": false,
@@ -841,12 +846,12 @@ data:
             "name": "compare_enabled",
             "options": [
               {
-                "selected": true,
+                "selected": false,
                 "text": "off",
                 "value": "off"
               },
               {
-                "selected": false,
+                "selected": true,
                 "text": "on",
                 "value": "on"
               }
@@ -859,13 +864,13 @@ data:
         ]
       },
       "time": {
-        "from": "2019-12-31T23:00:00.000Z",
-        "to": "2020-01-07T23:00:00.000Z"
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
       },
       "timepicker": {},
-      "timezone": "browser",
+      "timezone": "utc",
       "title": "Overlay Comparison",
       "uid": "bf7l6gu4glrswd",
-      "version": 5,
+      "version": 500,
       "weekStart": ""
     }
