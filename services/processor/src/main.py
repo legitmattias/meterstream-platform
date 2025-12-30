@@ -52,13 +52,26 @@ async def _create_subscription_with_retry():
             await asyncio.sleep(1)
 
 
+def _escape_tag_value(value: str) -> str:
+    """Escape special characters for InfluxDB line protocol tags.
+
+    In line protocol, tag values must escape: backslash, space, comma, equals.
+    """
+    return (value
+            .replace("\\", "\\\\")
+            .replace(" ", "\\ ")
+            .replace(",", "\\,")
+            .replace("=", "\\="))
+
+
 def _to_influx_line_protocol(reading: MeterReading) -> str:
     """Convert MeterReading -> Influx line protocol."""
-
     timestamp_nanoseconds = int(reading.timestamp.timestamp() * 1_000_000_000)
+    customer = _escape_tag_value(reading.customer)
+    area = _escape_tag_value(reading.area)
 
     return (
-        f"{settings.influx_measurement},customer={reading.customer},area={reading.area} "
+        f"{settings.influx_measurement},customer={customer},area={area} "
         f"power_consumption={float(reading.power_consumption)} {timestamp_nanoseconds}"
     )
 
