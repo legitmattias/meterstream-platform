@@ -32,6 +32,30 @@
     {
       "key": "ingest_token",
       "value": ""
+    },
+    {
+      "key": "baseline_total",
+      "value": "0"
+    },
+    {
+      "key": "test_year",
+      "value": ""
+    },
+    {
+      "key": "test_date",
+      "value": ""
+    },
+    {
+      "key": "timestamp_1",
+      "value": ""
+    },
+    {
+      "key": "timestamp_2",
+      "value": ""
+    },
+    {
+      "key": "timestamp_3",
+      "value": ""
     }
   ],
   "item": [
@@ -718,6 +742,68 @@
           ]
         },
         {
+          "name": "Get Baseline Dashboard (before ingest)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/data/dashboard?year={{test_year}}&date={{test_date}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "data", "dashboard"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{test_year}}"
+                },
+                {
+                  "key": "date",
+                  "value": "{{test_date}}"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{seeded_user_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Set today's date for baseline query",
+                  "var now = new Date();",
+                  "var year = now.getFullYear();",
+                  "var month = String(now.getMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getDate()).padStart(2, '0');",
+                  "pm.collectionVariables.set('test_year', year);",
+                  "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
+                  "console.log('Querying baseline for date: ' + year + '-' + month + '-' + day);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Baseline query successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Store baseline total for comparison after ingest",
+                  "var jsonData = pm.response.json();",
+                  "var baselineTotal = jsonData.total || 0;",
+                  "pm.collectionVariables.set('baseline_total', baselineTotal);",
+                  "console.log('Baseline total before ingest: ' + baselineTotal);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
           "name": "Ingest Data (with internal role)",
           "request": {
             "method": "POST",
@@ -734,10 +820,40 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T08:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"2025-01-15T09:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"2025-01-15T10:00:00Z\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"{{timestamp_1}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"{{timestamp_2}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"{{timestamp_3}}\",\n      \"CUSTOMER\": \"{{seeded_user_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate unique timestamps for this test run (within today)",
+                  "// Using current time ensures data won't overwrite previous runs",
+                  "var now = new Date();",
+                  "var baseTime = now.getTime();",
+                  "",
+                  "// Create 3 timestamps, each 1 second apart",
+                  "var t1 = new Date(baseTime);",
+                  "var t2 = new Date(baseTime + 1000);",
+                  "var t3 = new Date(baseTime + 2000);",
+                  "",
+                  "pm.collectionVariables.set('timestamp_1', t1.toISOString());",
+                  "pm.collectionVariables.set('timestamp_2', t2.toISOString());",
+                  "pm.collectionVariables.set('timestamp_3', t3.toISOString());",
+                  "",
+                  "// Store today's date for querying",
+                  "var year = now.getFullYear();",
+                  "var month = String(now.getMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getDate()).padStart(2, '0');",
+                  "pm.collectionVariables.set('test_year', year);",
+                  "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
+                  "",
+                  "console.log('Ingesting data with timestamps: ' + t1.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -761,17 +877,17 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/api/data/dashboard?year=2025&date=2025-01-15",
+              "raw": "{{base_url}}/api/data/dashboard?year={{test_year}}&date={{test_date}}",
               "host": ["{{base_url}}"],
               "path": ["api", "data", "dashboard"],
               "query": [
                 {
                   "key": "year",
-                  "value": "2025"
+                  "value": "{{test_year}}"
                 },
                 {
                   "key": "date",
-                  "value": "2025-01-15"
+                  "value": "{{test_date}}"
                 }
               ]
             },
@@ -820,31 +936,32 @@
                   "    pm.expect(jsonData.customer_id).to.eql(pm.environment.get('seeded_user_customer_id'));",
                   "});",
                   "",
-                  "pm.test('Pipeline processed ingested data correctly', function () {",
+                  "pm.test('Full pipeline: data increased after ingest', function () {",
+                  "    // This test verifies the FULL data flow:",
+                  "    // Auth -> Ingest API -> NATS -> Processor -> InfluxDB -> Query API",
                   "    var jsonData = pm.response.json();",
-                  "    // We ingested 50.0, 75.5, 60.25 at consecutive hours",
-                  "    // Hours may shift due to server timezone (CET/CEST)",
-                  "    // Find hours with non-zero consumption",
-                  "    var nonZeroHours = jsonData.hourly.filter(h => h.consumption > 0);",
+                  "    var baseline = parseFloat(pm.collectionVariables.get('baseline_total')) || 0;",
+                  "    var current = jsonData.total;",
+                  "    var expectedIncrease = 185.75; // 50.0 + 75.5 + 60.25",
+                  "    var actualIncrease = current - baseline;",
                   "    ",
-                  "    if (nonZeroHours.length === 0) {",
-                  "        pm.expect.fail('No data found in hourly breakdown. This test requires an empty NATS queue before running. If NATS has pending messages from previous runs, the processor may still be catching up. Check queue status: curl http://<staging-ip>:8222/jsz');",
+                  "    console.log('Baseline: ' + baseline + ', Current: ' + current + ', Increase: ' + actualIncrease);",
+                  "    ",
+                  "    // Data must have increased by at least the sum of ingested values",
+                  "    // This proves data flowed through entire pipeline",
+                  "    if (actualIncrease < expectedIncrease) {",
+                  "        pm.expect.fail('Data did not increase by expected amount. ' +",
+                  "            'Expected increase: ' + expectedIncrease + ', Actual: ' + actualIncrease.toFixed(2) + '. ' +",
+                  "            'Pipeline may still be processing. Wait and retry, or check NATS consumer lag.');",
                   "    }",
-                  "    ",
-                  "    pm.expect(nonZeroHours.length, 'Should have 3 hours with data').to.eql(3);",
-                  "    ",
-                  "    // Values should appear in order: 50.0, 75.5, 60.25",
-                  "    var values = nonZeroHours.map(h => h.consumption);",
-                  "    pm.expect(values).to.eql([50.0, 75.5, 60.25]);",
+                  "    pm.expect(actualIncrease).to.be.at.least(expectedIncrease);",
                   "});",
                   "",
-                  "pm.test('Total matches sum of ingested values', function () {",
+                  "pm.test('Hourly breakdown has data', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    // Total should be at least 185.75 (50.0 + 75.5 + 60.25)",
-                  "    if (jsonData.total < 185.75) {",
-                  "        pm.expect.fail('Total consumption (' + jsonData.total + ') is less than expected 185.75. This test requires an empty NATS queue. Pending messages from previous test runs can delay processing.');",
-                  "    }",
-                  "    pm.expect(jsonData.total).to.be.at.least(185.75);",
+                  "    var nonZeroHours = jsonData.hourly.filter(h => h.consumption > 0);",
+                  "    // Should have at least 1 hour with data (timestamps may be in same hour)",
+                  "    pm.expect(nonZeroHours.length).to.be.at.least(1);",
                   "});"
                 ],
                 "type": "text/javascript"
