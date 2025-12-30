@@ -453,22 +453,19 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "// Accept 200 (success) or 429 (rate limited)",
-                  "pm.test('Token refresh successful or rate limited', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 429]);",
+                  "pm.test('Token refresh successful', function () {",
+                  "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "if (pm.response.code === 200) {",
-                  "    pm.test('Response contains new tokens', function () {",
-                  "        var jsonData = pm.response.json();",
-                  "        pm.expect(jsonData).to.have.property('access_token');",
-                  "        pm.expect(jsonData).to.have.property('refresh_token');",
-                  "        ",
-                  "        // Update tokens",
-                  "        pm.collectionVariables.set('access_token', jsonData.access_token);",
-                  "        pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
-                  "    });",
-                  "}"
+                  "pm.test('Response contains new tokens', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    pm.expect(jsonData).to.have.property('refresh_token');",
+                  "    ",
+                  "    // Update tokens",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
+                  "});"
                 ],
                 "type": "text/javascript"
               }
@@ -1149,41 +1146,6 @@
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    pm.collectionVariables.set('admin_token', jsonData.access_token);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
-        },
-        {
-          "name": "Lookup Device User for Cleanup",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/auth/users",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var response = pm.response.json();",
-                  "    // Handle both paginated {users: [...]} and direct array responses",
-                  "    var users = response.users || response;",
-                  "    var testUser = users.find(u => u.email === 'newman-device-test@example.com');",
-                  "    if (testUser) {",
-                  "        pm.collectionVariables.set('user_id', testUser.id);",
-                  "        console.log('Found test user to delete: ' + testUser.id);",
-                  "    } else {",
-                  "        console.log('Test user not found (may have been deleted already)');",
-                  "    }",
                   "}"
                 ],
                 "type": "text/javascript"
