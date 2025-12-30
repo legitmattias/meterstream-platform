@@ -381,32 +381,34 @@ def query_yearly_months(
 
 
 def query_available_years(query_api: QueryApi, customer_id: str | None) -> list[int]:
-        """Return a sorted list of years (descending) for which data exists for the customer.
+    """Return a sorted list of years (descending) for which data exists for the customer.
 
-        Scans a reasonable window (last 10 years) and extracts the years from record timestamps.
-        """
-        customer_filter = _customer_filter(customer_id)
+    Uses yearly aggregation to efficiently find years with data (returns one record per year).
+    """
+    customer_filter = _customer_filter(customer_id)
 
-        flux_query = f'''
-        from(bucket: "{settings.influx_bucket}")
-            |> range(start: -10y)
-            |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
-            {customer_filter}
-            |> keep(columns: ["_time"])
-            |> sort(columns:["_time"], desc: false)
-        '''
+    # Use yearly aggregation to get one record per year - much more efficient
+    # than fetching all timestamps
+    flux_query = f'''
+    from(bucket: "{settings.influx_bucket}")
+        |> range(start: -10y)
+        |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
+        {customer_filter}
+        |> aggregateWindow(every: 1y, fn: count, createEmpty: false)
+        |> keep(columns: ["_time"])
+    '''
 
-        tables = query_api.query(flux_query, org=settings.influx_org)
+    tables = query_api.query(flux_query, org=settings.influx_org)
 
-        years = set()
-        for table in tables:
-                for record in table.records:
-                        ts = record.get_time()
-                        if ts is not None:
-                                years.add(ts.year)
+    years = set()
+    for table in tables:
+        for record in table.records:
+            ts = record.get_time()
+            if ts is not None:
+                years.add(ts.year)
 
-        # Return descending sorted years (most recent first)
-        return sorted(years, reverse=True)
+    # Return descending sorted years (most recent first)
+    return sorted(years, reverse=True)
 
 
 def query_quality_metrics(
