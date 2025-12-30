@@ -98,8 +98,10 @@ export function Dashboard() {
     return () => { mounted = false }
   }, [role])
 
-  // Dashboard data
+  // Dashboard data (customer only - admin uses different views)
   useEffect(() => {
+    if (role !== 'customer') return
+
     const fetchData = async () => {
       setLoadingData(true)
       setDataError('')
@@ -155,11 +157,11 @@ export function Dashboard() {
     }
 
     fetchData()
-  }, [selectedYear, selectedMonth, selectedDay])
+  }, [role, selectedYear, selectedMonth, selectedDay])
 
-  // Fetch comparison data for previous year
+  // Fetch comparison data for previous year (customer only)
   useEffect(() => {
-    if (!showComparison || !resolvedYear) {
+    if (role !== 'customer' || !showComparison || !resolvedYear) {
       setComparisonData(null)
       return
     }
@@ -195,7 +197,7 @@ export function Dashboard() {
     }
 
     fetchComparison()
-  }, [showComparison, resolvedYear, selectedMonth])
+  }, [role, showComparison, resolvedYear, selectedMonth])
 
   // Computed values for customer view
   const displayYear = resolvedYear || selectedYear
