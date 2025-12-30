@@ -225,6 +225,10 @@ __pycache__/
 venv/
 ENV/
 
+# uv package manager
+uv.lock
+.uv/
+
 # Testing
 .pytest_cache/
 .coverage

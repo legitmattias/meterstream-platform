@@ -38,10 +38,10 @@ class TestHealthEndpoint:
 
 
 class TestAuthProxy:
-    """Tests for auth service proxy (no JWT required)."""
+    """Tests for auth service proxy."""
 
-    def test_auth_route_does_not_require_jwt(self, client):
-        """Test that /api/auth routes don't require JWT validation."""
+    def test_auth_login_does_not_require_jwt(self, client):
+        """Test that /api/auth/login doesn't require JWT validation."""
         response = client.post("/api/auth/login", json={
             "username": "test",
             "password": "test",
@@ -49,6 +49,39 @@ class TestAuthProxy:
 
         # 502 means gateway tried to proxy (no auth failure).
         # If JWT was required, response would be 401.
+        assert response.status_code == 502
+
+    def test_auth_me_requires_jwt(self, client):
+        """Test that /api/auth/me requires JWT validation."""
+        response = client.get("/api/auth/me")
+
+        # Should return 401, not proxy to auth service
+        assert response.status_code == 401
+
+    def test_auth_me_with_invalid_token_returns_401(self, client):
+        """Test that /api/auth/me with invalid token returns 401."""
+        response = client.get(
+            "/api/auth/me",
+            headers={"Authorization": "Bearer invalid-token"},
+        )
+
+        assert response.status_code == 401
+
+    def test_auth_me_with_valid_token_proxies(self, client):
+        """Test that /api/auth/me with valid token proxies to auth service."""
+        exp = int(time.time()) + 3600
+        token = create_test_token({
+            "sub": "user-123",
+            "role": "customer",
+            "exp": exp,
+        })
+
+        response = client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 502 means auth passed and gateway tried to reach backend
         assert response.status_code == 502
 
 

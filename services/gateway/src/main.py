@@ -150,6 +150,16 @@ async def proxy_request(
         raise HTTPException(status_code=502, detail="Backend service unavailable") from e
 
 
+# Protected auth route - /me requires JWT validation
+@app.api_route("/api/auth/me", methods=["GET"])
+async def auth_me_proxy(request: Request):
+    """Proxy /me request with JWT validation."""
+    token_payload = await validate_jwt(request)
+    target_url = f"{settings.auth_service_url}/auth/me"
+    logger.debug("Proxying authenticated /me request to: %s", target_url)
+    return await proxy_request(request, target_url, token_payload)
+
+
 # Auth routes - NO JWT validation (login/register need to work without token)
 @app.api_route(
     "/api/auth/{path:path}",
