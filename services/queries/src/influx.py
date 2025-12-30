@@ -21,8 +21,41 @@ def get_influx_client() -> InfluxDBClient:
 def _customer_filter(customer_id: str | None) -> str:
     """Return a Flux filter string for customer tag when customer_id is provided."""
     if customer_id:
-        return f"\n      |> filter(fn: (r) => r[\"customer\"] == \"{customer_id}\")"
+        # Escape backslashes and double quotes to avoid injecting invalid Flux
+        # and reduce risk of injection when building the Flux string.
+        safe_id = str(customer_id).replace('\\', '\\\\').replace('"', '\\"')
+        return f"\n      |> filter(fn: (r) => r[\"customer\"] == \"{safe_id}\")"
     return ""
+
+
+def get_latest_year(query_api: QueryApi, customer_id: str | None) -> int | None:
+        """Return the year of the latest data point for the given customer.
+
+        This runs a small Flux query that sorts by time descending and limits to 1
+        record, then returns the year of that record's timestamp. Returns None
+        when no records are present.
+        """
+        customer_filter = _customer_filter(customer_id)
+
+        flux_query = f'''
+        from(bucket: "{settings.influx_bucket}")
+            |> range(start: -10y)
+            |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
+            {customer_filter}
+            |> keep(columns: ["_time"])
+            |> sort(columns:["_time"], desc: true)
+            |> limit(n:1)
+        '''
+
+        tables = query_api.query(flux_query, org=settings.influx_org)
+
+        for table in tables:
+                for record in table.records:
+                        ts = record.get_time()
+                        if ts is not None:
+                                return ts.year
+
+        return None
 
 
 def query_weekly_days(

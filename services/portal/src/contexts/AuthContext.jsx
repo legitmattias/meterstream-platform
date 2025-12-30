@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
       email: userData.email,
       role: userData.role,
       customerId: userData.customer_id,
-    })
+    })  
     setLoading(false)
   }
 

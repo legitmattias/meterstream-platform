@@ -1,0 +1,42 @@
+# Ignore local python artifacts and sensitive files for Docker build
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Build / packaging
+pip-wheel-metadata/
+*.egg-info
+dist/
+build/
+
+# Tests and coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+tests/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

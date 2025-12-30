@@ -19,6 +19,7 @@ from .influx import (
     query_weekly_days,
     query_top_consumers,
     query_quality_metrics,
+    get_latest_year,
 )
 from .system_metrics import collect_all_metrics
 from .models import (
@@ -194,6 +195,29 @@ async def get_dashboard(
     """
     # Resolve customer id (admins/internal may omit and request global view)
     customer_id = get_customer_id(x_customer_id, x_user_role)
+
+    # For customer requests always use the latest available year of data so
+    # the dashboard visualizes the most recent collection year. Admin/internal
+    # callers may still request arbitrary years (or 'latest').
+    if customer_id is not None:
+        try:
+            latest = get_latest_year(query_api, customer_id)
+            if latest is not None:
+                year = str(latest)
+        except Exception:
+            # If determining latest fails, leave year as-is (None) and
+            # downstream queries will behave as before (no month data).
+            pass
+    else:
+        # For admin/internal calls: if year omitted or explicitly 'latest',
+        # compute the most recent year present in the data for global view.
+        if (not year) or (isinstance(year, str) and year.lower() == 'latest'):
+            try:
+                latest = get_latest_year(query_api, customer_id)
+                if latest is not None:
+                    year = str(latest)
+            except Exception:
+                pass
 
     try:
         client = get_influx_client()
