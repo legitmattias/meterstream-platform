@@ -61,9 +61,9 @@ export function StorageStats({ storage }) {
         <MetricCard
           title="Queue Size"
           value={formatBytes(queueBytes)}
-          subtitle="pending write"
+          subtitle="buffer size"
           color={queueBytes > 10485760 ? 'orange' : 'blue'}
-          tooltip="Amount of data queued for replication. High values may indicate the read instance is behind."
+          tooltip="Disk buffer allocated for replication queue. Check 'Remaining' for actual pending data."
         />
         <MetricCard
           title="Remaining"

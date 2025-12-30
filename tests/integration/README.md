@@ -45,19 +45,35 @@ newman run tests/integration/collections/meterstream-api.json \
 
 ## Full Pipeline Tests
 
-The **Full Pipeline** tests verify complete data flow:
+The **Full Pipeline** tests verify complete data flow through the entire system:
+
+```
+Auth -> Ingest API -> NATS -> Processor -> InfluxDB -> Query API
+```
+
+**Test Strategy: Delta-Based Verification with Dynamic Timestamps**
+
+The test measures the *increase* in data rather than absolute values. This makes it idempotent - it works regardless of existing data from previous test runs.
+
+**Why dynamic timestamps?** InfluxDB uses timestamps as part of the primary key. Writing to the same timestamp overwrites data instead of adding to it. By using the current time for each test run, we ensure data accumulates rather than being overwritten.
 
 1. **Login seeded customer** user for querying
 2. **Verify customer cannot ingest** (403 Forbidden)
-3. **Internal user** (`ingest_token` from Section 4) ingests test data
-4. **Customer user** queries the dashboard and verifies data arrived
+3. **Query baseline** - Get today's total before ingesting
+4. **Internal user** ingests 3 readings with current timestamps (50.0 + 75.5 + 60.25 = 185.75 kWh)
+5. **Query after ingest** - Verify today's total increased by at least 185.75 kWh
 
-**Important:** Pipeline tests require an **empty NATS queue** to work correctly. If there are pending messages from previous test runs, the processor may still be catching up. Failed tests will display a helpful message about checking NATS queue status.
+This proves the full data flow works because:
+- Ingest API accepted the data (200 response, 3 accepted)
+- Data flowed through NATS (async processing)
+- Processor wrote to InfluxDB (data persisted)
+- Query API reads from InfluxDB (delta detected)
 
 **Notes:**
 - Uses both `device` and `internal` roles for ingestion (device is used in production for IoT meters)
 - 5s pre-request delay before querying to allow async pipeline processing
-- Assertions check values in sequence, not specific hours (handles CET/CEST timezone shifts)
+- Dynamic timestamps ensure each test run adds new data (no overwrites)
+- Delta-based assertion handles accumulated data from multiple test runs
 
 ## Environment Variables
 
