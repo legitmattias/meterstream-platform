@@ -823,14 +823,14 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "// Use current date for testing (pipeline customer has no historical data)",
+                  "// Use current UTC date for testing (timestamps are in UTC)",
                   "var now = new Date();",
-                  "var year = now.getFullYear();",
-                  "var month = String(now.getMonth() + 1).padStart(2, '0');",
-                  "var day = String(now.getDate()).padStart(2, '0');",
+                  "var year = now.getUTCFullYear();",
+                  "var month = String(now.getUTCMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getUTCDate()).padStart(2, '0');",
                   "pm.collectionVariables.set('test_year', year);",
                   "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
-                  "console.log('Querying baseline for date: ' + year + '-' + month + '-' + day);"
+                  "console.log('Querying baseline for UTC date: ' + year + '-' + month + '-' + day);"
                 ],
                 "type": "text/javascript"
               }
@@ -893,10 +893,10 @@
                   "pm.collectionVariables.set('timestamp_2', t2.toISOString());",
                   "pm.collectionVariables.set('timestamp_3', t3.toISOString());",
                   "",
-                  "// Store today's date for querying",
-                  "var year = now.getFullYear();",
-                  "var month = String(now.getMonth() + 1).padStart(2, '0');",
-                  "var day = String(now.getDate()).padStart(2, '0');",
+                  "// Store today's date for querying (use UTC to match timestamps)",
+                  "var year = now.getUTCFullYear();",
+                  "var month = String(now.getUTCMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getUTCDate()).padStart(2, '0');",
                   "pm.collectionVariables.set('test_year', year);",
                   "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
                   "",
