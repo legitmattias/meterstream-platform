@@ -214,7 +214,9 @@ export function Dashboard() {
     if (selectedMonth === 'all') {
       return getSwedishMonthName(peak.label)
     }
-    return `Dag ${peak.label}`
+    // Format as "7 maj" instead of "Dag 7"
+    const monthName = getSwedishMonthName(parseInt(selectedMonth), true).toLowerCase()
+    return `${peak.label} ${monthName}`
   }, [peak, selectedMonth])
 
   // For admin backward compatibility
