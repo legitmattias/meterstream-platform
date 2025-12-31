@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { config } from '../config'
 import { api } from '../lib/api'
 import { MonthBarChart } from '../components/MonthBarChart'
 import { ConsumptionChart } from '../components/ConsumptionChart'
@@ -231,12 +230,6 @@ export function Dashboard() {
     [monthSeries, monthTotal]
   )
 
-  const baseGrafanaUrl = config.grafanaDashboardUid
-    ? `${config.grafanaUrl}/d/${config.grafanaDashboardUid}`
-    : config.grafanaUrl
-
-  const opsGrafanaUrl = `${baseGrafanaUrl}?view=ops`
-
   if (loading || activeTab === null) {
     return <div className="dashboard-loading">{LABELS_SV.loading}</div>
   }
@@ -389,7 +382,6 @@ export function Dashboard() {
       logout={logout}
       activeTab={activeTab}
       setActiveTab={setActiveTab}
-      opsGrafanaUrl={opsGrafanaUrl}
       logs={logs}
       topConsumers={topConsumers}
       quality={quality}

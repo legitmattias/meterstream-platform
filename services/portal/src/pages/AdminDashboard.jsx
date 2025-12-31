@@ -1,6 +1,30 @@
 import React from 'react'
 import { SystemMonitoring } from '../components/SystemMonitoring'
 import { UserManagement } from '../components/UserManagement'
+import { config } from '../config'
+
+const GRAFANA_DASHBOARDS = [
+  {
+    uid: 'ff7iuh80yjh8gd',
+    title: 'Landing Page',
+    description: 'Overview of key metrics and quick navigation to other dashboards.',
+  },
+  {
+    uid: 'af7irczysogzke',
+    title: 'Aggregated Bar Chart',
+    description: 'Monthly and yearly consumption totals visualized as bar charts.',
+  },
+  {
+    uid: 'df7iuv4kojsowd',
+    title: 'Aggregated Line Chart',
+    description: 'Consumption trends over time with interactive line graphs.',
+  },
+  {
+    uid: 'bf7l6gu4glrswd',
+    title: 'Overlay Comparison',
+    description: 'Compare consumption patterns across different time periods.',
+  },
+]
 
 export default function AdminDashboard(props) {
   const {
@@ -8,7 +32,6 @@ export default function AdminDashboard(props) {
     logout,
     activeTab,
     setActiveTab,
-    opsGrafanaUrl,
   } = props
 
   const role = user?.role || 'customer'
@@ -72,19 +95,21 @@ export default function AdminDashboard(props) {
                 <h2>Consumer Analytics</h2>
                 <p className="grafana-description">
                   View detailed consumption analytics, trends, and reports in Grafana.
-                  Dashboards include real-time data, historical comparisons, and customer insights.
                 </p>
-                <a
-                  className="grafana-button"
-                  href={opsGrafanaUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className="grafana-button-text">
-                    <strong>Open Grafana Dashboard</strong>
-                    <small>Opens in a new tab</small>
-                  </span>
-                </a>
+                <div className="grafana-dashboard-grid">
+                  {GRAFANA_DASHBOARDS.map((dashboard) => (
+                    <a
+                      key={dashboard.uid}
+                      className="grafana-dashboard-card"
+                      href={`${config.grafanaUrl}/d/${dashboard.uid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <span className="grafana-card-title">{dashboard.title}</span>
+                      <span className="grafana-card-description">{dashboard.description}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>
