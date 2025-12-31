@@ -177,33 +177,43 @@ def query_total_and_average(
     year: str | None = None,
     month: int | None = None,
 ) -> dict[str, float]:
-    """Query total and average consumption for a specific year and optionally month."""
+    """Query total and average consumption for a specific year and optionally month.
+
+    Uses aggregation for efficiency:
+    - Yearly view: aggregates by month, returns average per month
+    - Monthly view: aggregates by day, returns average per day
+    """
     # Build proper date range based on year and month
     if year and year != "All":
         year_int = int(year)
         if month:
-            # Specific month
+            # Specific month - aggregate by day
             start_date = datetime(year_int, month, 1)
             if month == 12:
                 end_date = datetime(year_int + 1, 1, 1)
             else:
                 end_date = datetime(year_int, month + 1, 1)
+            aggregate_window = "1d"
         else:
-            # Whole year
+            # Whole year - aggregate by month
             start_date = datetime(year_int, 1, 1)
             end_date = datetime(year_int + 1, 1, 1)
+            aggregate_window = "1mo"
         range_clause = f'range(start: {start_date.isoformat()}Z, stop: {end_date.isoformat()}Z)'
     else:
         # Fallback to last 365 days if no year specified
         range_clause = 'range(start: -365d)'
+        aggregate_window = "1mo"
 
     customer_filter = _customer_filter(customer_id)
 
+    # Use aggregation to avoid fetching millions of raw data points
     flux_query = f'''
     from(bucket: "{settings.influx_bucket}")
       |> {range_clause}
       |> filter(fn: (r) => r._measurement == "{settings.influx_measurement}")
       {customer_filter}
+      |> aggregateWindow(every: {aggregate_window}, fn: sum, createEmpty: false)
     '''
 
     tables = query_api.query(flux_query, org=settings.influx_org)
