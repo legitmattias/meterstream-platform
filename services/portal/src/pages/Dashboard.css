@@ -237,6 +237,51 @@
   transform: translateX(4px);
 }
 
+/* Grafana Dashboard Grid */
+.grafana-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+@media (max-width: 600px) {
+  .grafana-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.grafana-dashboard-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 10px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+}
+
+.grafana-dashboard-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  text-decoration: none;
+}
+
+.grafana-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.grafana-card-description {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
 .logs {
   display: flex;
   flex-direction: column;
