@@ -6,23 +6,23 @@ import { config } from '../config'
 const GRAFANA_DASHBOARDS = [
   {
     uid: 'ff7iuh80yjh8gd',
-    title: 'Landing Page',
-    description: 'Overview of key metrics and quick navigation to other dashboards.',
+    title: 'General Monitor',
+    description: 'Raw hourly meter data (line graph).',
   },
   {
     uid: 'af7irczysogzke',
     title: 'Aggregated Bar Chart',
-    description: 'Monthly and yearly consumption totals visualized as bar charts.',
+    description: 'Totals by interval. Filter by customer.',
   },
   {
     uid: 'df7iuv4kojsowd',
     title: 'Aggregated Line Chart',
-    description: 'Consumption trends over time with interactive line graphs.',
+    description: 'Trends by interval. Filter by customer.',
   },
   {
     uid: 'bf7l6gu4glrswd',
     title: 'Overlay Comparison',
-    description: 'Compare consumption patterns across different time periods.',
+    description: 'Compare time periods. Filter by customer and shift.',
   },
 ]
 

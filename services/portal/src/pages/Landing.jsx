@@ -19,7 +19,7 @@ export function Landing() {
 
     ],
     internal: [
-      { label: 'Internal dashboard', href: baseGrafana },
+      { label: 'Consumer Analytics', href: '/analytics', internal: true },
     ],
     customer: [
       { label: 'Open analytics', href: '/analytics', internal: true },
