@@ -1,95 +1,65 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { config } from '../config'
+import { Header } from '../components/Header'
 import './Landing.css'
 
 export function Landing() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-
-  const role = user?.role || 'customer'
-  const baseGrafana = config.grafanaDashboardUid
-    ? `${config.grafanaUrl}/d/${config.grafanaDashboardUid}`
-    : config.grafanaUrl
-
-  const linksByRole = {
-    admin: [
-      { label: 'Grafana', href: `${baseGrafana}?view=ops` },
-      { label: 'Admin analytics', href: '/analytics', internal: true},
-
-    ],
-    internal: [
-      { label: 'Consumer Analytics', href: '/analytics', internal: true },
-    ],
-    customer: [
-      { label: 'Open analytics', href: '/analytics', internal: true },
-    ],
-  }
-
-  const ctas = linksByRole[role] || linksByRole.customer
-
-  const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-  }
-
   return (
+    <>
     <div className="landing">
-      <header className="landing-hero">
-        <div className="hero-text">
-          <p className="eyebrow">Welcome back</p>
-          <h1>Hi {user?.email || 'there'}, here’s your energy snapshot</h1>
-          <p className="subtitle">
-            Quick links based on your role. Open the dashboards you need most, or jump to the portal analytics view.
-          </p>
-          <div className="hero-actions">
-            {ctas.map((cta) =>
-              cta.internal ? (
-                <Link key={cta.label} className="btn primary" to={cta.href}>{cta.label}</Link>
-              ) : (
-                <a key={cta.label} className="btn primary" href={cta.href} target="_blank" rel="noreferrer">{cta.label}</a>
-              )
-            )}
-            <button className="btn ghost" onClick={handleLogout}>Sign out</button>
-          </div>
-          <p className="note">Session active. Secure access enforced via gateway.</p>
-        </div>
-      </header>
+      <Header />
 
-      <section className="features">
-        <div className="feature-card">
-          <h3>Role-aware links</h3>
-          <p>Admin: ops/health Grafana. Internal: Grafana. Customer: portal analytics.</p>
-        </div>
-        <div className="feature-card">
-          <h3>Scoped access</h3>
-          <p>Data is filtered by your customer ID in the gateway and query service.</p>
-        </div>
-        <div className="feature-card">
-          <h3>Fast navigation</h3>
-          <p>Open the right dashboard without digging through menus.</p>
-        </div>
-      </section>
-
-      <section className="cta">
-        <div className="cta-card">
-          <div>
-            <p className="eyebrow">Next step</p>
-            <h2>Open your dashboards</h2>
-            <p className="subtitle">Choose the view that matches your role. Full analytics stay available anytime.</p>
+      <section className="landing-hero">
+        <div className="hero-content">
+          <div className="welcome-section">
+            <p className="eyebrow">Welcome to MeterStream</p>
+            <h1>Kalmar Energy Monitoring</h1>
+            <p className="subtitle">
+              Track and analyze your energy consumption data in real-time.
+              MeterStream provides comprehensive insights into your power usage,
+              helping you make informed decisions about energy efficiency and cost savings.
+            </p>
+            <p className="description">
+              Our platform collects data from smart meters across Kalmar, processes it through
+              a secure gateway, and presents it in easy-to-understand visualizations.
+              Whether you're monitoring a single building or managing multiple facilities,
+              MeterStream gives you the tools you need to optimize your energy consumption.
+            </p>
           </div>
-          <div className="cta-actions">
-            {ctas.map((cta) =>
-              cta.internal ? (
-                <Link key={cta.label} className="btn primary" to={cta.href}>{cta.label}</Link>
-              ) : (
-                <a key={cta.label} className="btn primary" href={cta.href} target="_blank" rel="noreferrer">{cta.label}</a>
-              )
-            )}
-            <button className="btn ghost" onClick={handleLogout}>Sign out</button>
+
+          <div className="news-section">
+            <div className="news-card">
+              <h3 className="news-header">Latest Updates</h3>
+
+              <div className="news-item">
+                <span className="news-date">Jan 7, 2026</span>
+                <h4>Welcome to MeterStream</h4>
+                <p>The new analytics platform is now live for all Kalmar Energy customers.</p>
+              </div>
+
+              <div className="news-item">
+                <span className="news-date">Dec 28, 2025</span>
+                <h4>System Monitoring</h4>
+                <p>New system health dashboard shows real-time service status and metrics.</p>
+              </div>
+
+              <div className="news-item">
+                <span className="news-date">Dec 15, 2025</span>
+                <h4>User Management</h4>
+                <p>Admins can now create and manage user accounts directly from the portal.</p>
+              </div>
+
+              <div className="news-item">
+                <span className="news-date">Dec 1, 2025</span>
+                <h4>Energy prices</h4>
+                <p>Prices of electric skyrockets, but not for Kalmar!</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
     </div>
+    <footer className="customer-footer">
+          <p>Kalmar Energi - Meterstream</p>
+    </footer>
+    </>
   )
 }
