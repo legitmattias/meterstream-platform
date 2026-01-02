@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+data:
+  # MongoDB connection - credentials injected via env vars from secrets
+  mongodb_host: "mongodb"
+  mongodb_port: "27017"
+  mongodb_database: "meterstream_auth"
+
+  # JWT Configuration
+  jwt_algorithm: "HS256"
+  jwt_expire_minutes: "60"
+  jwt_refresh_expire_days: "7"
+
+  # Service Configuration
+  service_name: "auth-service"
+  log_level: "INFO"
+
+  # Bootstrap admin
+  bootstrap_admin_email: "admin@meterstream.com"

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: gateway
+          image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/gateway:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: JWT_SECRET
+            - name: AUTH_SERVICE_URL
+              value: "http://auth:8000"
+            - name: INGESTION_SERVICE_URL
+              value: "http://ingestion:8000"
+            # ==== ANALYTICS INTEGRATION: Add queries service URL ====
+            - name: QUERIES_SERVICE_URL
+              value: "http://queries:8000"
+            # ==== END ANALYTICS INTEGRATION ====
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10

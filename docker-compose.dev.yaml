@@ -1,0 +1,132 @@
+# Development environment for MeterStream
+# Usage: docker compose -f docker-compose.dev.yaml up -d
+#
+# This starts NATS JetStream locally for development.
+# Services can run locally (outside Docker) and connect to NATS.
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    container_name: meterstream-nats
+    command: ["--jetstream", "--store_dir", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+  
+  influxdb:
+    image: influxdb:2.7
+    container_name: meterstream-influxdb
+    ports:
+      - "8086:8086"
+    env_file:
+      - .env
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: ${INFLUXDB_INIT_MODE}
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_INIT_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_INIT_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_INIT_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_INIT_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN}
+      DOCKER_INFLUXDB_INIT_RETENTION: 30d
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+
+  mongodb:
+    image: mongo:7
+    container_name: meterstream-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-password}
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: meterstream-auth
+    ports:
+      - "8001:8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGODB_URL: mongodb://${MONGODB_USERNAME:-admin}:${MONGODB_PASSWORD:-password}@mongodb:27017/?authSource=admin
+      DATABASE_NAME: meterstream_auth
+      JWT_SECRET: ${JWT_SECRET:-test-secret-for-local-dev}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 60
+      JWT_REFRESH_EXPIRE_DAYS: 7
+      SERVICE_NAME: auth-service
+      DEBUG: "true"
+      LOG_LEVEL: INFO
+
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: meterstream-gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-test-secret-for-local-dev}
+      JWT_ALGORITHM: HS256
+      AUTH_SERVICE_URL: http://auth:8000
+      INGESTION_SERVICE_URL: http://ingestion:8000
+      QUERIES_SERVICE_URL: http://queries:8000
+      DISABLE_AUTH_FOR_DATA: "true" # FOR TESTING PURPOSES ONLY - DO NOT USE IN PRODUCTION = FALSE
+      DEV_CUSTOMER_ID: "demo-customer" # 
+      LOG_LEVEL: INFO
+
+  ingestion:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: meterstream-ingestion
+    ports:
+      - "8002:8000"
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: INFO
+
+  queries:
+    build:
+      context: ./services/queries
+      dockerfile: Dockerfile
+    container_name: meterstream-queries
+    ports:
+      - "8003:8000"
+    depends_on:
+      influxdb:
+        condition: service_started
+    environment:
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_ORG: ${INFLUXDB_INIT_ORG:-meterstream}
+      INFLUXDB_BUCKET: ${INFLUXDB_INIT_BUCKET:-data}
+      INFLUXDB_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-test-token}
+      LOG_LEVEL: INFO
+
+volumes:
+  nats-data:
+  influxdb-data:
+  mongodb-data:
+

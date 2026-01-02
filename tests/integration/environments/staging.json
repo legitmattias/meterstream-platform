@@ -1,0 +1,67 @@
+{
+  "id": "staging-env",
+  "name": "MeterStream Staging",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "http://194.47.170.217",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_email",
+      "value": "integration-test@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_password",
+      "value": "testpassword123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "seeded_user_email",
+      "value": "alice.andersson@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "seeded_user_password",
+      "value": "testpassword123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "seeded_user_customer_id",
+      "value": "1060598736",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "device_email",
+      "value": "device-meter-1@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "device_password",
+      "value": "testpassword123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "admin_email",
+      "value": "admin@meterstream.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "admin_password",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

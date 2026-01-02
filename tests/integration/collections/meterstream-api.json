@@ -1,0 +1,1244 @@
+{
+  "info": {
+    "name": "MeterStream API Integration Tests",
+    "description": "End-to-end API tests for MeterStream pipeline.\n\nTests cover:\n1. Health checks\n2. Unauthenticated error cases (before any login sets cookies)\n3. Authentication flow (admin creates device user, login, me, refresh, logout)\n4. Data ingestion (device role + internal role)\n5. Full pipeline: auth → ingest → query\n6. Cleanup (deletes created device user)\n\nNote: Requires ADMIN_PASSWORD env var for user creation/cleanup.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "{{base_url}}"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "seeded_user_token",
+      "value": ""
+    },
+    {
+      "key": "ingest_token",
+      "value": ""
+    },
+    {
+      "key": "baseline_total",
+      "value": "0"
+    },
+    {
+      "key": "test_year",
+      "value": ""
+    },
+    {
+      "key": "test_date",
+      "value": ""
+    },
+    {
+      "key": "timestamp_1",
+      "value": ""
+    },
+    {
+      "key": "timestamp_2",
+      "value": ""
+    },
+    {
+      "key": "timestamp_3",
+      "value": ""
+    },
+    {
+      "key": "pipeline_customer_token",
+      "value": ""
+    },
+    {
+      "key": "pipeline_customer_id",
+      "value": "NEWMAN_PIPELINE_TEST"
+    },
+    {
+      "key": "pipeline_customer_user_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health Checks",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Gateway is healthy', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has healthy status', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    // Accept both 'ok' and 'healthy' as valid status values",
+                  "    pm.expect(['ok', 'healthy']).to.include(jsonData.status);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Unauthenticated Error Cases",
+      "description": "These tests run BEFORE any login to ensure no cookies are present",
+      "item": [
+        {
+          "name": "Ingest Without Auth (should fail)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T14:00:00Z\",\n      \"CUSTOMER\": \"UNAUTHORIZED\",\n      \"AREA\": \"test\",\n      \"Power_Consumption\": 999.99\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 without auth', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Me Without Auth (should fail)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 without auth', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query Without Auth (should fail)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/data/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 without auth', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login with Wrong Password",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"wrong-password-12345\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 for wrong password', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Me With Invalid Token (should fail)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer invalid.token.here"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 for invalid token', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query With Invalid Token (should fail)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/data/consumption",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer invalid.token.here"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 with invalid token', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Auth Flow",
+      "item": [
+        {
+          "name": "Admin Login (for user creation)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Admin login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('admin_token', jsonData.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Device User (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newman-device-test@example.com\",\n  \"password\": \"{{test_password}}\",\n  \"name\": \"Newman Device Test\",\n  \"role\": \"device\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Accept 201 (created) or 400 (already exists from previous run)",
+                  "pm.test('Device user creation returns 201 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.test('Response contains user with device role', function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('id');",
+                  "        pm.expect(jsonData).to.have.property('email');",
+                  "        pm.expect(jsonData.role).to.eql('device');",
+                  "        pm.collectionVariables.set('user_id', jsonData.id);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Device User",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newman-device-test@example.com\",\n  \"password\": \"{{test_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Device user login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains tokens with device role', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    pm.expect(jsonData).to.have.property('refresh_token');",
+                  "    pm.expect(jsonData).to.have.property('expires_in');",
+                  "    ",
+                  "    // Store tokens for subsequent requests",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
+                  "    ",
+                  "    // Verify device role in JWT",
+                  "    var parts = jsonData.access_token.split('.');",
+                  "    var payload = JSON.parse(atob(parts[1]));",
+                  "    pm.expect(payload.role).to.eql('device');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Get me successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains user info', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('email');",
+                  "    pm.expect(jsonData).to.have.property('name');",
+                  "    pm.expect(jsonData).to.have.property('role');",
+                  "    ",
+                  "    // Store user_id if not already set",
+                  "    if (!pm.collectionVariables.get('user_id')) {",
+                  "        pm.collectionVariables.set('user_id', jsonData.id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/refresh",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Token refresh successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains new tokens', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    pm.expect(jsonData).to.have.property('refresh_token');",
+                  "    ",
+                  "    // Update tokens",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', jsonData.refresh_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/logout"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Logout successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response confirms logout', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include('Logged out');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Ingestion",
+      "description": "Uses device token from Section 3 (already stored in access_token)",
+      "item": [
+        {
+          "name": "Device Ingest Single Reading",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T10:00:00Z\",\n      \"CUSTOMER\": \"TEST_CUSTOMER_001\",\n      \"AREA\": \"integration-test\",\n      \"Power_Consumption\": 123.45\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Device ingest successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response confirms accepted count', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accepted');",
+                  "    pm.expect(jsonData.accepted).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Device Ingest Batch Readings",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T11:00:00Z\",\n      \"CUSTOMER\": \"TEST_CUSTOMER_001\",\n      \"AREA\": \"integration-test\",\n      \"Power_Consumption\": 100.00\n    },\n    {\n      \"DateTime\": \"2025-01-15T12:00:00Z\",\n      \"CUSTOMER\": \"TEST_CUSTOMER_001\",\n      \"AREA\": \"integration-test\",\n      \"Power_Consumption\": 150.00\n    },\n    {\n      \"DateTime\": \"2025-01-15T13:00:00Z\",\n      \"CUSTOMER\": \"TEST_CUSTOMER_002\",\n      \"AREA\": \"integration-test\",\n      \"Power_Consumption\": 200.00\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Device batch ingest successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response confirms all readings accepted', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepted).to.eql(3);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Internal User for Ingestion",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Internal user login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    // Also store for Section 5 pipeline tests",
+                  "    pm.collectionVariables.set('ingest_token', jsonData.access_token);",
+                  "    ",
+                  "    // Verify internal role",
+                  "    var parts = jsonData.access_token.split('.');",
+                  "    var payload = JSON.parse(atob(parts[1]));",
+                  "    pm.expect(payload.role).to.eql('internal');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Internal User Ingest Reading",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T14:00:00Z\",\n      \"CUSTOMER\": \"INTERNAL_TEST_001\",\n      \"AREA\": \"integration-test\",\n      \"Power_Consumption\": 88.88\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Internal user ingest successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response confirms accepted count', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accepted');",
+                  "    pm.expect(jsonData.accepted).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Full Pipeline (Auth → Ingest → Query)",
+      "description": "Tests the complete data flow using a dedicated test customer (NEWMAN_PIPELINE_TEST) to avoid polluting seeded customer data.",
+      "item": [
+        {
+          "name": "Create Pipeline Test Customer (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newman-pipeline-customer@example.com\",\n  \"password\": \"{{test_password}}\",\n  \"name\": \"Newman Pipeline Test Customer\",\n  \"role\": \"customer\",\n  \"customer_id\": \"{{pipeline_customer_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Accept 201 (created) or 400 (already exists from previous run)",
+                  "pm.test('Pipeline customer creation returns 201 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.test('Response contains customer with correct customer_id', function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('id');",
+                  "        pm.expect(jsonData.role).to.eql('customer');",
+                  "        pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Pipeline Test Customer",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newman-pipeline-customer@example.com\",\n  \"password\": \"{{test_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Pipeline customer login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Token contains pipeline customer_id', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access_token');",
+                  "    ",
+                  "    // Store token for query tests",
+                  "    pm.collectionVariables.set('pipeline_customer_token', jsonData.access_token);",
+                  "    ",
+                  "    // Decode JWT to verify customer_id and extract user ID for cleanup",
+                  "    var parts = jsonData.access_token.split('.');",
+                  "    var payload = JSON.parse(atob(parts[1]));",
+                  "    pm.expect(payload).to.have.property('customer_id');",
+                  "    pm.expect(payload.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
+                  "    ",
+                  "    // Store user ID (sub) for cleanup in Section 6",
+                  "    pm.collectionVariables.set('pipeline_customer_user_id', payload.sub);",
+                  "    console.log('Stored pipeline customer user ID: ' + payload.sub);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer Cannot Ingest (should fail with 403)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pipeline_customer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"2025-01-15T08:00:00Z\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Customer role returns 403 for ingest', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Error message mentions required roles', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.detail).to.include('device');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Baseline Dashboard (before ingest)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/data/dashboard?year={{test_year}}&date={{test_date}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "data", "dashboard"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{test_year}}"
+                },
+                {
+                  "key": "date",
+                  "value": "{{test_date}}"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pipeline_customer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Use current UTC date for testing (timestamps are in UTC)",
+                  "var now = new Date();",
+                  "var year = now.getUTCFullYear();",
+                  "var month = String(now.getUTCMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getUTCDate()).padStart(2, '0');",
+                  "pm.collectionVariables.set('test_year', year);",
+                  "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
+                  "console.log('Querying baseline for UTC date: ' + year + '-' + month + '-' + day);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Baseline query successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Store baseline total for comparison after ingest",
+                  "var jsonData = pm.response.json();",
+                  "var baselineTotal = jsonData.total || 0;",
+                  "pm.collectionVariables.set('baseline_total', baselineTotal);",
+                  "console.log('Baseline total before ingest: ' + baselineTotal);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest Data (with internal role)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/ingest",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ingest_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"readings\": [\n    {\n      \"DateTime\": \"{{timestamp_1}}\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 50.0\n    },\n    {\n      \"DateTime\": \"{{timestamp_2}}\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 75.5\n    },\n    {\n      \"DateTime\": \"{{timestamp_3}}\",\n      \"CUSTOMER\": \"{{pipeline_customer_id}}\",\n      \"AREA\": \"pipeline-test\",\n      \"Power_Consumption\": 60.25\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate unique timestamps for this test run",
+                  "// Using current time ensures data won't overwrite previous runs",
+                  "var now = new Date();",
+                  "var baseTime = now.getTime();",
+                  "",
+                  "// Create 3 timestamps, each 1 second apart",
+                  "var t1 = new Date(baseTime);",
+                  "var t2 = new Date(baseTime + 1000);",
+                  "var t3 = new Date(baseTime + 2000);",
+                  "",
+                  "pm.collectionVariables.set('timestamp_1', t1.toISOString());",
+                  "pm.collectionVariables.set('timestamp_2', t2.toISOString());",
+                  "pm.collectionVariables.set('timestamp_3', t3.toISOString());",
+                  "",
+                  "// Store today's date for querying (use UTC to match timestamps)",
+                  "var year = now.getUTCFullYear();",
+                  "var month = String(now.getUTCMonth() + 1).padStart(2, '0');",
+                  "var day = String(now.getUTCDate()).padStart(2, '0');",
+                  "pm.collectionVariables.set('test_year', year);",
+                  "pm.collectionVariables.set('test_date', year + '-' + month + '-' + day);",
+                  "",
+                  "console.log('Ingesting data with timestamps: ' + t1.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Ingest successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('All readings accepted', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accepted).to.eql(3);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query Dashboard Data (verify pipeline)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/data/dashboard?year={{test_year}}&date={{test_date}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "data", "dashboard"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{test_year}}"
+                },
+                {
+                  "key": "date",
+                  "value": "{{test_date}}"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pipeline_customer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Wait for async pipeline processing (NATS -> Processor -> InfluxDB)",
+                  "const sleep = (ms) => {",
+                  "    const start = Date.now();",
+                  "    while (Date.now() - start < ms) {}",
+                  "};",
+                  "console.log('Waiting 5s for pipeline processing...');",
+                  "sleep(5000);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Dashboard query successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains dashboard data structure', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('customer_id');",
+                  "    pm.expect(jsonData).to.have.property('weekly_days');",
+                  "    pm.expect(jsonData).to.have.property('hourly');",
+                  "    pm.expect(jsonData).to.have.property('total');",
+                  "    pm.expect(jsonData).to.have.property('average');",
+                  "});",
+                  "",
+                  "pm.test('Customer ID matches pipeline test customer', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
+                  "});",
+                  "",
+                  "pm.test('Full pipeline: data increased after ingest', function () {",
+                  "    // This test verifies the FULL data flow:",
+                  "    // Auth -> Ingest API -> NATS -> Processor -> InfluxDB -> Query API",
+                  "    var jsonData = pm.response.json();",
+                  "    var baseline = parseFloat(pm.collectionVariables.get('baseline_total')) || 0;",
+                  "    var current = jsonData.total;",
+                  "    var expectedIncrease = 185.75; // 50.0 + 75.5 + 60.25",
+                  "    var actualIncrease = current - baseline;",
+                  "    ",
+                  "    console.log('Baseline: ' + baseline + ', Current: ' + current + ', Increase: ' + actualIncrease);",
+                  "    ",
+                  "    // Data must have increased by at least the sum of ingested values",
+                  "    // This proves data flowed through entire pipeline",
+                  "    if (actualIncrease < expectedIncrease) {",
+                  "        pm.expect.fail('Data did not increase by expected amount. ' +",
+                  "            'Expected increase: ' + expectedIncrease + ', Actual: ' + actualIncrease.toFixed(2) + '. ' +",
+                  "            'Pipeline may still be processing. Wait and retry, or check NATS consumer lag.');",
+                  "    }",
+                  "    pm.expect(actualIncrease).to.be.at.least(expectedIncrease);",
+                  "});",
+                  "",
+                  "pm.test('Hourly breakdown has data', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var nonZeroHours = jsonData.hourly.filter(h => h.consumption > 0);",
+                  "    // Should have at least 1 hour with data (timestamps may be in same hour)",
+                  "    pm.expect(nonZeroHours.length).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query Consumption Data",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/data/consumption?period=daily",
+              "host": ["{{base_url}}"],
+              "path": ["api", "data", "consumption"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "daily"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pipeline_customer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Consumption query successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains consumption data', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('customer_id');",
+                  "    pm.expect(jsonData).to.have.property('period');",
+                  "    pm.expect(jsonData).to.have.property('data');",
+                  "    pm.expect(jsonData.period).to.eql('daily');",
+                  "    pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query Summary Data",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/data/summary?period=weekly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "data", "summary"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "weekly"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pipeline_customer_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Summary query successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains summary statistics', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('customer_id');",
+                  "    pm.expect(jsonData).to.have.property('period');",
+                  "    pm.expect(jsonData).to.have.property('total');",
+                  "    pm.expect(jsonData).to.have.property('average');",
+                  "    pm.expect(jsonData.customer_id).to.eql(pm.collectionVariables.get('pipeline_customer_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Cleanup",
+      "item": [
+        {
+          "name": "Login as Admin (for cleanup)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Admin login may fail if not configured - that's ok",
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('admin_token', jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Device Test User",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/auth/users/{{user_id}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Skip test if user ID wasn't set",
+                  "var userId = pm.collectionVariables.get('user_id');",
+                  "if (!userId) {",
+                  "    pm.test('Device test user cleanup skipped (not found)', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "} else {",
+                  "    // Accept 204 (deleted), 404 (not found), 401/403 (no admin)",
+                  "    pm.test('Device test user cleanup attempted', function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([204, 404, 401, 403]);",
+                  "    });",
+                  "    ",
+                  "    if (pm.response.code === 204) {",
+                  "        console.log('Successfully deleted device test user');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Pipeline Test Customer",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/auth/users/{{pipeline_customer_user_id}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Skip if user ID wasn't found in lookup",
+                  "var userId = pm.collectionVariables.get('pipeline_customer_user_id');",
+                  "if (!userId) {",
+                  "    console.log('No pipeline customer user ID found, skipping delete');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Skip test if user ID wasn't set",
+                  "var userId = pm.collectionVariables.get('pipeline_customer_user_id');",
+                  "if (!userId) {",
+                  "    pm.test('Pipeline test customer cleanup skipped (not found)', function () {",
+                  "        pm.expect(true).to.be.true;",
+                  "    });",
+                  "} else {",
+                  "    // Accept 204 (deleted), 404 (not found), 401/403 (no admin)",
+                  "    pm.test('Pipeline test customer cleanup attempted', function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([204, 404, 401, 403]);",
+                  "    });",
+                  "    ",
+                  "    if (pm.response.code === 204) {",
+                  "        console.log('Successfully deleted pipeline test customer');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

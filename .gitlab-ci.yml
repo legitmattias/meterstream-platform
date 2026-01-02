@@ -1,0 +1,1074 @@
+# ==============================================================================
+# GitLab CI/CD Pipeline for MeterStream
+# ==============================================================================
+# Builds Docker images and deploys services to Kubernetes
+#
+# Branch Strategy:
+#   - development → Staging environment
+#   - main → Production environment (via git tags)
+#
+# Stages:
+#   1. test-connection  - Verify kubectl connectivity
+#   2. Test             - Run tests for each service
+#   3. build            - Build Docker images with Kaniko
+#   4. deploy-staging   - Deploy to staging (manual)
+#   5. integration-test - Run Newman API tests against staging
+#   6. deploy-prod      - Deploy to production (git tags only)
+# ==============================================================================
+
+stages:
+  - test-connection
+  - test
+  - build
+  - deploy-staging
+  - integration-test
+  - deploy-prod
+
+# ------------------------------------------------------------------------------
+# Global Variables
+# ------------------------------------------------------------------------------
+variables:
+  IMAGE_BASE: ${CI_REGISTRY_IMAGE}  # GitLab registry URL
+  TAG: ${CI_COMMIT_SHORT_SHA}       # Short git commit SHA
+
+# ==============================================================================
+# TEST CONNECTION
+# ==============================================================================
+
+test-staging-connection:
+  stage: test-connection
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  script:
+    - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG=$PWD/kubeconfig
+    - kubectl config current-context
+    - kubectl get nodes
+  rules:
+    - when: manual
+
+# test-prod-connection:
+#   stage: test-connection
+#   image:
+#     name: bitnami/kubectl:latest
+#     entrypoint: [""]
+#   script:
+#     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+#     - export KUBECONFIG=$PWD/kubeconfig
+#     - kubectl config current-context
+#     - kubectl get nodes
+#   rules:
+#     - when: manual
+
+# ==============================================================================
+# TEST STAGE - Run unit tests before building
+# ==============================================================================
+
+.test-python:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - cd services/${SERVICE_NAME}
+    - pip install --no-cache-dir -r requirements.txt
+    - pip install pytest pytest-cov pytest-asyncio
+  script:
+    - pytest tests/ -v --cov=src --cov-report=term --cov-report=xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: services/${SERVICE_NAME}/coverage.xml
+    expire_in: 1 week
+  rules:
+    - when: manual
+
+test-auth:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: auth
+    MONGODB_URI: "mongodb://localhost:27017"
+    JWT_SECRET: "test-secret-key"
+    DATABASE_NAME: "test-meterstream"
+
+test-ingestion:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: ingestion
+    NATS_URL: "nats://localhost:4222"
+
+test-processor:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: processor
+    NATS_URL: "nats://localhost:4222"
+    INFLUXDB_URL: "http://localhost:8086"
+    INFLUXDB_TOKEN: "test-token"
+
+test-gateway:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: gateway
+    JWT_SECRET: "test-secret"
+    AUTH_SERVICE_URL: "http://mock-auth:8000"
+    GRAFANA_SERVICE_URL: "http://mock-grafana:3000"
+    INGESTION_SERVICE_URL: "http://mock-ingestion:8000"
+
+test-queries:
+  extends: .test-python
+  variables:
+    SERVICE_NAME: queries
+    INFLUX_TOKEN: "test-token"
+
+# ==============================================================================
+# BUILD
+# ==============================================================================
+
+.build:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "$CI_REGISTRY": {
+            "username": "$CI_REGISTRY_USER",
+            "password": "$CI_REGISTRY_PASSWORD"
+          },
+          "https://index.docker.io/v1/": {
+            "username": "$DOCKERHUB_USERNAME",
+            "password": "$DOCKERHUB_TOKEN"
+          }
+        }
+      }
+      EOF
+    - |
+      # Determine destinations based on context
+      DESTINATIONS="--destination ${IMAGE_BASE}/${SERVICE_NAME}:${TAG}"
+      DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/${SERVICE_NAME}:latest"
+
+      # If this is a version tag, also tag with the version
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/${SERVICE_NAME}:${CI_COMMIT_TAG}"
+      fi
+
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}/services/${SERVICE_NAME}" \
+        --dockerfile "${CI_PROJECT_DIR}/services/${SERVICE_NAME}/Dockerfile" \
+        $DESTINATIONS \
+        --cache=true \
+        --cache-ttl=168h
+  rules:
+    - when: manual
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/' # always build if git tag
+      when: always
+
+build-ingestion:
+  extends: .build
+  needs:
+    - job: test-ingestion
+      optional: true
+  variables:
+    SERVICE_NAME: ingestion
+
+build-auth:
+  extends: .build
+  needs:
+    - job: test-auth
+      optional: true
+  variables:
+    SERVICE_NAME: auth
+
+build-processor:
+  extends: .build
+  needs:
+    - job: test-processor
+      optional: true
+  variables:
+    SERVICE_NAME: processor
+
+build-gateway:
+  extends: .build
+  needs:
+    - job: test-gateway
+      optional: true
+  variables:
+    SERVICE_NAME: gateway
+
+
+build-queries:
+  extends: .build
+  needs:
+    - job: test-queries
+      optional: true
+  variables:
+    SERVICE_NAME: queries
+
+build-portal:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "$CI_REGISTRY": {
+            "username": "$CI_REGISTRY_USER",
+            "password": "$CI_REGISTRY_PASSWORD"
+          },
+          "https://index.docker.io/v1/": {
+            "username": "$DOCKERHUB_USERNAME",
+            "password": "$DOCKERHUB_TOKEN"
+          }
+        }
+      }
+      EOF
+    - |
+      # Determine destinations based on context
+      DESTINATIONS="--destination ${IMAGE_BASE}/portal:${TAG}"
+      DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/portal:latest"
+
+      # If this is a version tag, also tag with the version
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        DESTINATIONS="$DESTINATIONS --destination ${IMAGE_BASE}/portal:${CI_COMMIT_TAG}"
+      fi
+
+      # Build with correct Kubernetes service URLs for portal
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}/services/portal" \
+        --dockerfile "${CI_PROJECT_DIR}/services/portal/Dockerfile" \
+        --build-arg VITE_API_BASE_URL=/api \
+        --build-arg VITE_GRAFANA_URL=/api/grafana \
+        $DESTINATIONS \
+        --cache=true \
+        --cache-ttl=168h
+  rules:
+    - when: manual
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: always
+
+# ==============================================================================
+# DEPLOY STAGING
+# ==============================================================================
+
+.deploy-base:
+  stage: deploy-staging
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  before_script:
+    # Setup kubectl authentication
+    - echo "$KUBE_CONFIG_STAGING_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG=$PWD/kubeconfig
+
+    # Verify connection
+    - kubectl config current-context
+    - kubectl get nodes
+
+    # Ensure namespace exists
+    - kubectl create namespace meterstream || true
+
+    # Define dependency checker functions
+    - |
+      require_running() {
+        local service_name=$1
+        echo "Checking dependency: $service_name"
+
+        # Check if deployment exists
+        if ! kubectl get deployment "$service_name" -n meterstream &> /dev/null; then
+          echo "ERROR: Required service '$service_name' is not deployed"
+          echo "Please run 'deploy-${service_name}-staging' job first"
+          exit 1
+        fi
+
+        # Check if it has ready replicas
+        local ready=$(kubectl get deployment "$service_name" -n meterstream -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [ "$ready" -lt 1 ]; then
+          echo "WARNING: Service '$service_name' exists but has 0 ready replicas"
+          echo "Waiting up to 60s for it to become ready..."
+          if ! kubectl wait --for=condition=available --timeout=60s deployment/"$service_name" -n meterstream; then
+            echo "ERROR: Service '$service_name' failed to become ready"
+            exit 1
+          fi
+        fi
+
+        echo "OK: $service_name is running and ready"
+      }
+
+      require_statefulset() {
+        local service_name=$1
+        echo "Checking dependency: $service_name"
+
+        # Check if statefulset exists
+        if ! kubectl get statefulset "$service_name" -n meterstream &> /dev/null; then
+          echo "ERROR: Required service '$service_name' is not deployed"
+          echo "Please run 'deploy-${service_name}-staging' job first"
+          exit 1
+        fi
+
+        # Check if it has ready replicas
+        local ready=$(kubectl get statefulset "$service_name" -n meterstream -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [ "$ready" -lt 1 ]; then
+          echo "WARNING: Service '$service_name' exists but has 0 ready replicas"
+          echo "Waiting up to 60s for it to become ready..."
+          if ! kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=60s statefulset/"$service_name" -n meterstream; then
+            echo "ERROR: Service '$service_name' failed to become ready"
+            exit 1
+          fi
+        fi
+
+        echo "OK: $service_name is running and ready"
+      }
+  environment:
+    name: staging
+
+# MongoDB - StatefulSet with persistent storage
+deploy-mongodb-staging:
+  extends: .deploy-base
+  needs: []  # No build dependency - uses stock mongo image
+  script:
+    # Create/Update MongoDB secret from CI/CD variables (only if it doesn't exist or needs update)
+    - |
+      kubectl -n meterstream create secret generic mongodb-secret \
+        --from-literal=username="$MONGODB_USERNAME" \
+        --from-literal=password="$MONGODB_PASSWORD_STAGING" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Apply MongoDB manifests (service, statefulset)
+    - kubectl apply -f k8s/mongoDB/service.yaml -n meterstream
+    - kubectl apply -f k8s/mongoDB/statefulset.yaml -n meterstream
+
+    # Debug: Show pod status
+    - echo "Checking MongoDB status..."
+    - kubectl -n meterstream get pods -l app=mongodb
+    - kubectl -n meterstream get pvc mongodb-data-mongodb-0
+
+    # Wait for StatefulSet to be ready (max 3 minutes to account for initialDelaySeconds=30s)
+    - kubectl -n meterstream rollout status statefulset/mongodb --timeout=180s || (
+        echo "MongoDB failed to become ready. Debugging...";
+        kubectl -n meterstream describe pod -l app=mongodb;
+        kubectl -n meterstream logs -l app=mongodb --tail=50;
+        exit 1
+      )
+  rules:
+    - when: manual
+
+# NATS - Message queue
+deploy-nats-staging:
+  extends: .deploy-base
+  needs: []  # No build dependency - uses stock nats image
+  script:
+    # Apply all NATS manifests
+    - kubectl apply -f k8s/nats/ -n meterstream
+
+    # Wait for StatefulSet to be ready (max 2 minutes)
+    - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
+  rules:
+    - when: manual
+
+# Ingestion - Receives meter data (depends on: NATS)
+deploy-ingestion-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-ingestion
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Verify required dependencies are running
+    - require_statefulset nats
+
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/ingestion/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
+  rules:
+    - when: manual
+
+# Auth - JWT authentication (depends on: MongoDB)
+deploy-auth-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-auth
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Verify required dependencies are running
+    - require_statefulset mongodb
+    
+    # Create admin secrets and run bootstrap
+    - |
+      kubectl -n meterstream create secret generic admin-bootstrap \
+      --from-literal=password="$STAG_BOOTSTRAP_ADMIN_PASSWORD" \
+      --dry-run=client -o yaml | kubectl -n meterstream apply -f -
+
+    # Create JWT secret from CI/CD variables (shared with Gateway)
+    - |
+      kubectl -n meterstream create secret generic jwt-secret \
+        --from-literal=JWT_SECRET="$JWT_SECRET_STAGING" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Apply manifests (configmap, service, deployment)
+    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
+    - kubectl apply -f k8s/auth/service.yaml -n meterstream
+    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
+
+    # Enable test data seeding for staging 
+    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=true
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/auth --timeout=120s
+  rules:
+    - when: manual
+
+# Processor - Processes meter data (depends on: NATS, InfluxDB)
+deploy-processor-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-processor
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Verify required dependencies are running
+    - require_statefulset nats
+    - require_statefulset influxdb
+
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/processor/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/processor --timeout=120s
+  rules:
+    - when: manual
+
+# Gateway - API gateway (depends on: Auth, Ingestion)
+deploy-gateway-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-gateway
+      optional: true  # Can deploy even if build was skipped
+  script:
+    # Verify required dependencies are running
+    - require_running auth
+    - require_running ingestion
+
+    # Apply manifests (secret, service, deployment)
+    - kubectl apply -f k8s/gateway/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
+  rules:
+    - when: manual
+
+# Ingress - Traefik routing (frontend + API gateway)
+deploy-ingress-staging:
+  extends: .deploy-base
+  needs: []  # No build dependency - configures traefik ingress
+  script:
+    - kubectl apply -f k8s/ingress/ingress.yaml -n meterstream
+    - kubectl get ingress -n meterstream
+  rules:
+    - when: manual
+
+# InfluxDB - Time-series database (WRITE instance for CQRS)
+deploy-influx-staging:
+  extends: .deploy-base
+  needs: []  # No build dependency - uses stock influxdb image
+  script:
+    # Create InfluxDB initialization secret from CI/CD variables
+    - |
+      kubectl -n meterstream create secret generic influxdb-init \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$STAG_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$STAG_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$STAG_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$STAG_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$STAG_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$STAG_INFLUXDB_INIT_ADMIN_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$STAG_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Apply InfluxDB manifests (WRITE instance)
+    - kubectl -n meterstream apply -f k8s/influx/influx.yaml
+
+    # Wait for StatefulSet to be ready (max 3 minutes)
+    - kubectl -n meterstream rollout status statefulset/influxdb --timeout=180s
+  rules:
+    - when: manual
+
+# InfluxDB Read Replica - CQRS read instance (Queries/Grafana read from here)
+deploy-influx-read-staging:
+  extends: .deploy-base
+  needs: []  # No build dependency - uses stock influxdb image
+  script:
+    # Create InfluxDB READ instance secret from CI/CD variables
+    # Uses same org/bucket but different token for security
+    - |
+      kubectl -n meterstream create secret generic influxdb-read-init \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$STAG_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$STAG_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$STAG_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$STAG_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$STAG_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$STAG_INFLUXDB_READ_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$STAG_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Apply InfluxDB READ replica manifests
+    - kubectl -n meterstream apply -f k8s/influx/influx-read.yaml
+
+    # Wait for StatefulSet to be ready (max 3 minutes)
+    - kubectl -n meterstream rollout status statefulset/influxdb-read --timeout=180s
+  rules:
+    - when: manual
+
+# Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
+setup-influx-replication-staging:
+  extends: .deploy-base
+  needs: []
+  script:
+    # Verify both instances are running
+    - require_statefulset influxdb
+    - require_statefulset influxdb-read
+
+    # Delete any previous job run (idempotent)
+    - kubectl -n meterstream delete job setup-influx-replication --ignore-not-found=true
+
+    # Apply the replication setup job
+    - kubectl -n meterstream apply -f k8s/influx/replication-job.yaml
+
+    # Wait for job to complete (max 2 minutes)
+    - kubectl -n meterstream wait --for=condition=complete job/setup-influx-replication --timeout=120s
+
+    # Show job logs
+    - kubectl -n meterstream logs job/setup-influx-replication
+  rules:
+    - when: manual
+
+# Grafana - Metrics visualization (depends on: InfluxDB READ instance for CQRS)
+deploy-grafana-staging:
+  extends: .deploy-base
+  needs: []  # Runtime check verifies influxdb-read is running
+  script:
+    # Verify required dependencies are running (CQRS: read from read instance)
+    - require_statefulset influxdb-read
+
+    # Create datasource secret with token substituted by shell
+    # (Grafana does NOT substitute env vars in secureJsonData)
+    # CQRS: Points to READ instance, not write instance
+    - |
+      kubectl -n meterstream apply -f - <<EOF
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: grafana-datasource-secret
+      stringData:
+        datasources.yaml: |
+          apiVersion: 1
+          datasources:
+            - name: InfluxDB
+              uid: influxdb
+              type: influxdb
+              access: proxy
+              url: http://influxdb-read:8086
+              isDefault: true
+              jsonData:
+                version: Flux
+                organization: meterstream
+                defaultBucket: meterstream
+                httpMode: POST
+              secureJsonData:
+                token: "${STAG_INFLUXDB_READ_TOKEN}"
+      EOF
+
+    # Apply Grafana manifests (service, deployment, dashboard configmaps)
+    - kubectl apply -f k8s/grafana/ -n meterstream
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/grafana --timeout=120s
+  rules:
+    - when: manual
+
+# Queries - Analytics data queries (depends on: InfluxDB READ instance for CQRS)
+deploy-queries-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-queries
+      optional: true
+  script:
+    # Verify required dependencies are running (CQRS: read from read instance)
+    - require_statefulset influxdb-read
+
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/queries/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/queries queries="${IMAGE_BASE}/queries:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/queries --timeout=120s
+  rules:
+    - when: manual
+
+# Portal - Frontend web application (depends on: Gateway)
+deploy-portal-staging:
+  extends: .deploy-base
+  needs:
+    - job: build-portal
+      optional: true
+    # - job: deploy-gateway-staging
+    #   optional: true
+  script:
+    # Verify required dependencies are running
+    - require_running gateway
+
+    # Apply manifests (service, deployment)
+    - kubectl apply -f k8s/portal/ -n meterstream
+
+    # Update deployment to use newly built image
+    - kubectl -n meterstream set image deploy/portal portal="${IMAGE_BASE}/portal:${TAG}"
+
+    # Wait for deployment to finish (max 2 minutes)
+    - kubectl -n meterstream rollout status deploy/portal --timeout=120s
+  rules:
+    - when: manual
+
+# ==============================================================================
+# INTEGRATION TESTS - Run Newman API tests against staging
+# ==============================================================================
+
+newman-integration-test:
+  stage: integration-test
+  image:
+    name: postman/newman:alpine
+    entrypoint: [""]
+  script:
+    # Run Newman with the MeterStream API collection against staging environment
+    - |
+      newman run tests/integration/collections/meterstream-api.json \
+        --environment tests/integration/environments/staging.json \
+        --env-var "admin_password=$STAG_BOOTSTRAP_ADMIN_PASSWORD" \
+        --reporters cli,junit \
+        --reporter-junit-export newman-results.xml \
+        --color on \
+        --disable-unicode \
+        --bail
+  artifacts:
+    when: always
+    reports:
+      junit: newman-results.xml
+    paths:
+      - newman-results.xml
+    expire_in: 1 week
+  rules:
+    # Only run after staging deployment completes
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
+      when: manual
+      #  Depends on all core staging services being deployed
+      needs:
+        - job: deploy-gateway-staging
+          optional: true
+        - job: deploy-auth-staging
+          optional: true
+        - job: deploy-ingestion-staging
+          optional: true
+        - job: deploy-processor-staging
+          optional: true
+        - job: deploy-queries-staging
+          optional: true
+      allow_failure: false
+
+
+# ==============================================================================
+# DEPLOY PRODUCTION
+# if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/' Pipeline jobb Kommer bara visas ifall det finns en git tag som machar regex. 
+# ==============================================================================
+
+.deploy-base-prod:
+  stage: deploy-prod
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  before_script:
+    # Setup kubectl authentication for PRODUCTION
+    - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG=$PWD/kubeconfig
+
+    # Verify connection
+    - kubectl config current-context
+    - kubectl get nodes
+
+    # Ensure namespace exists
+    - kubectl create namespace meterstream || true
+
+    # Define dependency checker functions
+    - |
+      require_running() {
+        local service_name=$1
+        echo "Checking dependency: $service_name"
+
+        if ! kubectl get deployment "$service_name" -n meterstream &> /dev/null; then
+          echo "ERROR: Required service '$service_name' is not deployed"
+          echo "Please run 'deploy-${service_name}-prod' job first"
+          exit 1
+        fi
+
+        local ready=$(kubectl get deployment "$service_name" -n meterstream -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [ "$ready" -lt 1 ]; then
+          echo "WARNING: Service '$service_name' exists but has 0 ready replicas"
+          echo "Waiting up to 60s for it to become ready..."
+          if ! kubectl wait --for=condition=available --timeout=60s deployment/"$service_name" -n meterstream; then
+            echo "ERROR: Service '$service_name' failed to become ready"
+            exit 1
+          fi
+        fi
+
+        echo "OK: $service_name is running and ready"
+      }
+
+      require_statefulset() {
+        local service_name=$1
+        echo "Checking dependency: $service_name"
+
+        if ! kubectl get statefulset "$service_name" -n meterstream &> /dev/null; then
+          echo "ERROR: Required service '$service_name' is not deployed"
+          echo "Please run 'deploy-${service_name}-prod' job first"
+          exit 1
+        fi
+
+        local ready=$(kubectl get statefulset "$service_name" -n meterstream -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        if [ "$ready" -lt 1 ]; then
+          echo "WARNING: Service '$service_name' exists but has 0 ready replicas"
+          echo "Waiting up to 60s for it to become ready..."
+          if ! kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=60s statefulset/"$service_name" -n meterstream; then
+            echo "ERROR: Service '$service_name' failed to become ready"
+            exit 1
+          fi
+        fi
+
+        echo "OK: $service_name is running and ready"
+      }
+  environment:
+    name: production
+
+# MongoDB - StatefulSet with persistent storage
+deploy-mongodb-prod:
+  extends: .deploy-base-prod
+  script:
+    - |
+      kubectl -n meterstream create secret generic mongodb-secret \
+        --from-literal=username="$MONGODB_USERNAME" \
+        --from-literal=password="$MONGODB_PASSWORD_PROD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    - kubectl apply -f k8s/mongoDB/service.yaml -n meterstream
+    - kubectl apply -f k8s/mongoDB/statefulset.yaml -n meterstream
+
+    - kubectl -n meterstream rollout status statefulset/mongodb --timeout=180s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# NATS - Message queue
+deploy-nats-prod:
+  extends: .deploy-base-prod
+  script:
+    - kubectl apply -f k8s/nats/ -n meterstream
+    - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# InfluxDB - Time-series database (WRITE instance for CQRS)
+deploy-influx-prod:
+  extends: .deploy-base-prod
+  script:
+    - |
+      kubectl -n meterstream create secret generic influxdb-init \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$PROD_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$PROD_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$PROD_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$PROD_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$PROD_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$PROD_INFLUXDB_INIT_ADMIN_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$PROD_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    - kubectl -n meterstream apply -f k8s/influx/influx.yaml
+    - kubectl -n meterstream rollout status statefulset/influxdb --timeout=180s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# InfluxDB Read Replica - CQRS read instance (Queries/Grafana read from here)
+deploy-influx-read-prod:
+  extends: .deploy-base-prod
+  needs: []  # No build dependency - uses stock influxdb image
+  script:
+    # Create InfluxDB READ instance secret from CI/CD variables
+    - |
+      kubectl -n meterstream create secret generic influxdb-read-init \
+        --from-literal=DOCKER_INFLUXDB_INIT_MODE="$PROD_INFLUXDB_INIT_MODE" \
+        --from-literal=DOCKER_INFLUXDB_INIT_USERNAME="$PROD_INFLUXDB_INIT_USERNAME" \
+        --from-literal=DOCKER_INFLUXDB_INIT_PASSWORD="$PROD_INFLUXDB_INIT_PASSWORD" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ORG="$PROD_INFLUXDB_INIT_ORG" \
+        --from-literal=DOCKER_INFLUXDB_INIT_BUCKET="$PROD_INFLUXDB_INIT_BUCKET" \
+        --from-literal=DOCKER_INFLUXDB_INIT_ADMIN_TOKEN="$PROD_INFLUXDB_READ_TOKEN" \
+        --from-literal=DOCKER_INFLUXDB_INIT_RETENTION="$PROD_INFLUXDB_INIT_RETENTION" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    - kubectl -n meterstream apply -f k8s/influx/influx-read.yaml
+    - kubectl -n meterstream rollout status statefulset/influxdb-read --timeout=180s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
+setup-influx-replication-prod:
+  extends: .deploy-base-prod
+  needs: []
+  script:
+    # Verify both instances are running
+    - require_statefulset influxdb
+    - require_statefulset influxdb-read
+
+    - kubectl -n meterstream delete job setup-influx-replication --ignore-not-found=true
+    - kubectl -n meterstream apply -f k8s/influx/replication-job.yaml
+    - kubectl -n meterstream wait --for=condition=complete job/setup-influx-replication --timeout=120s
+    - kubectl -n meterstream logs job/setup-influx-replication
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Grafana - Metrics visualization (depends on: InfluxDB READ instance for CQRS)
+deploy-grafana-prod:
+  extends: .deploy-base-prod
+  needs: []  # Runtime check verifies influxdb-read is running
+  script:
+    - require_statefulset influxdb-read
+
+    # Create datasource secret pointing to READ instance
+    - |
+      kubectl -n meterstream apply -f - <<EOF
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: grafana-datasource-secret
+      stringData:
+        datasources.yaml: |
+          apiVersion: 1
+          datasources:
+            - name: InfluxDB
+              uid: influxdb
+              type: influxdb
+              access: proxy
+              url: http://influxdb-read:8086
+              isDefault: true
+              jsonData:
+                version: Flux
+                organization: meterstream
+                defaultBucket: meterstream
+                httpMode: POST
+              secureJsonData:
+                token: "${PROD_INFLUXDB_READ_TOKEN}"
+      EOF
+
+    - kubectl apply -f k8s/grafana/ -n meterstream
+    - kubectl -n meterstream rollout status deploy/grafana --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Auth - JWT authentication (depends on: MongoDB)
+deploy-auth-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-auth
+      optional: true
+  script:
+    - require_statefulset mongodb
+
+    # Create admin secrets and run bootstrap
+    - |
+      kubectl -n meterstream create secret generic admin-bootstrap \
+      --from-literal=password="$PROD_BOOTSTRAP_ADMIN_PASSWORD" \
+      --dry-run=client -o yaml | kubectl -n meterstream apply -f -
+
+    - |
+      kubectl -n meterstream create secret generic jwt-secret \
+        --from-literal=JWT_SECRET="$JWT_SECRET_PROD" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    - kubectl apply -f k8s/auth/configmap.yaml -n meterstream
+    - kubectl apply -f k8s/auth/service.yaml -n meterstream
+    - kubectl apply -f k8s/auth/deployment.yaml -n meterstream
+
+    # Enable test data seeding with production password
+    - kubectl -n meterstream set env deploy/auth SEED_TEST_DATA=false # false for prod
+    - kubectl -n meterstream set env deploy/auth TEST_USER_PASSWORD="$TEST_USER_PASSWORD"
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/auth auth="${IMAGE_BASE}/auth:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/auth --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+### KEEP: This is the correct deploy-ingestion-prod job (top-level)
+# Ingestion - Receives meter data (depends on: NATS)
+deploy-ingestion-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-ingestion
+      optional: true
+  script:
+    - require_statefulset nats
+
+    - kubectl apply -f k8s/ingestion/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/ingestion ingestion="${IMAGE_BASE}/ingestion:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Processor - Processes meter data (depends on: NATS, InfluxDB)
+deploy-processor-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-processor
+      optional: true
+  script:
+    - require_statefulset nats
+    - require_statefulset influxdb
+
+    - kubectl apply -f k8s/processor/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/processor processor="${IMAGE_BASE}/processor:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/processor --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Gateway - API gateway (depends on: Auth, Ingestion)
+deploy-gateway-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-gateway
+      optional: true
+  script:
+    - require_running auth
+    - require_running ingestion
+
+    - kubectl apply -f k8s/gateway/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/gateway gateway="${IMAGE_BASE}/gateway:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Ingress - Traefik routing (frontend + API gateway)
+deploy-ingress-prod:
+  extends: .deploy-base-prod
+  script:
+    - kubectl apply -f k8s/ingress/ingress.yaml -n meterstream
+    - kubectl get ingress -n meterstream
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+
+# Queries - Analytics data queries (depends on: InfluxDB READ instance for CQRS)
+deploy-queries-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-queries
+      optional: true
+  script:
+    - require_statefulset influxdb-read
+
+    - kubectl apply -f k8s/queries/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/queries queries="${IMAGE_BASE}/queries:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/queries --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+
+# Portal - Frontend web application (depends on: Gateway)
+deploy-portal-prod:
+  extends: .deploy-base-prod
+  needs:
+    - job: build-portal
+      optional: true
+    - job: deploy-gateway-prod
+      optional: true
+  script:
+    - require_running gateway
+
+    - kubectl apply -f k8s/portal/ -n meterstream
+
+    - |
+      if [[ "$CI_COMMIT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        IMAGE_TAG="${CI_COMMIT_TAG}"
+      else
+        IMAGE_TAG="${TAG}"
+      fi
+      kubectl -n meterstream set image deploy/portal portal="${IMAGE_BASE}/portal:${IMAGE_TAG}"
+
+    - kubectl -n meterstream rollout status deploy/portal --timeout=120s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
+

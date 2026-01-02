@@ -1,0 +1,97 @@
+#GF (Grafana) Ingen PVC eftersom dashboards provisioneras från ConfigMaps (stateless Grafana).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.2.0
+          ports:
+            - containerPort: 3000
+
+          env:
+            # Är default-värden som används "out of the box", kan använda annat via secrets.
+            #- name: GF_SECURITY_ADMIN_USER
+            #  value: xxxxxx
+            #- name: GF_SECURITY_ADMIN_PASSWORD
+            #  value: xxxxxx
+            - name: GF_USERS_DEFAULT_THEME
+              value: light
+
+            - name: GF_DEFAULT_LANGUAGE
+              value: sv-SE
+
+            - name: GF_SECURITY_ALLOW_EMBEDDING
+              value: "true"
+
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-init
+                  key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+
+            # Auth Proxy - trust X-User-* headers from Gateway
+            - name: GF_AUTH_PROXY_ENABLED
+              value: "true" # ska vara true
+            - name: GF_AUTH_PROXY_HEADER_NAME
+              value: "X-User-ID"
+            - name: GF_AUTH_PROXY_HEADER_PROPERTY
+              value: "username"
+            - name: GF_AUTH_PROXY_AUTO_SIGN_UP
+              value: "true"
+            - name: GF_AUTH_PROXY_WHITELIST
+              value: "10.42.0.0/16"
+
+            # Disable other auth methods
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true" # ska vara true
+            # Disable anonymous access
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+
+            - name: GF_AUTH_PROXY_HEADERS
+              value: "Role:X-User-Role"
+
+            # %(protocol)s and %(domain)s automatically adapt to the request
+            # Works with: localhost, 194.47......(staging), 194.47...... (prod)
+            - name: GF_SERVER_ROOT_URL
+              value: "%(protocol)s://%(domain)s/api/grafana/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+
+
+
+
+
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+
+            - name: providers
+              mountPath: /etc/grafana/provisioning/dashboards
+
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+
+        - name: providers
+          configMap:
+            name: grafana-dashboard-providers
+
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards

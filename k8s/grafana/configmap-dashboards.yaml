@@ -1,0 +1,876 @@
+# Innehåller dashboards som JSON (exporterade från Grafana GUI).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+data:
+  landing-page.json: |-
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "light-blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "fillOpacity": 100,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineWidth": 1,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 14,
+            "w": 23,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "barRadius": 0.1,
+            "barWidth": 0.97,
+            "colorByField": "Value",
+            "fullHighlight": false,
+            "groupWidth": 0.7,
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "orientation": "auto",
+            "showValue": "auto",
+            "stacking": "none",
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "xTickLabelRotation": 0,
+            "xTickLabelSpacing": 0
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influxdb"
+              },
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"1d\"\r\nstart = date.truncate(t: v.timeRangeStart, unit: 1d)\r\nstop  = date.truncate(t: v.timeRangeStop, unit: 1d)\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n  |> yield(name: \"daily_sum\")\r\n",
+              "refId": "A"
+            }
+          ],
+          "title": "Monitor",
+          "type": "barchart"
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 39,
+      "tags": [],
+      "templating": {
+        "list": []
+      },
+      "time": {
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
+      },
+      "timepicker": {},
+      "timezone": "utc",
+      "title": "Landing page",
+      "uid": "ff7iuh80yjh8gd",
+      "version": 4,
+      "weekStart": ""
+    }
+
+  aggregated-bar-chart.json: |-
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "light-blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "fillOpacity": 100,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineWidth": 2,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 14,
+            "w": 23,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "barRadius": 0.1,
+            "barWidth": 0.97,
+            "colorByField": "Value",
+            "fullHighlight": false,
+            "groupWidth": 0.7,
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "orientation": "auto",
+            "showValue": "auto",
+            "stacking": "none",
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            },
+            "xField": "Time",
+            "xTickLabelRotation": 0,
+            "xTickLabelSpacing": 0
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influxdb"
+              },
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"${interval}\"\r\nstart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nstop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n",
+              "refId": "A"
+            }
+          ],
+          "title": "Aggregated Energy Consumption",
+          "type": "barchart"
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 39,
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "influxdb",
+              "uid": "influxdb"
+            },
+            "definition": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)",
+            "hide": 0,
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "name": "customer",
+            "options": [],
+            "query": {
+              "query": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 0,
+            "type": "query"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "1d",
+              "value": "1d"
+            },
+            "hide": 1,
+            "includeAll": false,
+            "multi": false,
+            "name": "interval",
+            "options": [
+              {
+                "selected": true,
+                "text": "1h",
+                "value": "1h"
+              },
+              {
+                "selected": false,
+                "text": "12h",
+                "value": "12h"
+              },
+              {
+                "selected": false,
+                "text": "1d",
+                "value": "1d"
+              },
+              {
+                "selected": false,
+                "text": "7d",
+                "value": "7d"
+              },
+              {
+                "selected": false,
+                "text": "30d",
+                "value": "30d"
+              },
+              {
+                "selected": false,
+                "text": "182d",
+                "value": "182d"
+              },
+              {
+                "selected": false,
+                "text": "365d",
+                "value": "365d"
+              }
+            ],
+            "query": "1h,12h,1d,7d,30d,182d,365d\n",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          }
+        ]
+      },
+      "time": {
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
+      },
+      "timepicker": {},
+      "timezone": "utc",
+      "title": "Aggregated Bar Chart",
+      "uid": "af7irczysogzke",
+      "version": 7,
+      "weekStart": ""
+    }
+
+  line-chart.json: |-
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "light-blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 13,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 14,
+            "w": 23,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influxdb"
+              },
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"${interval}\"\r\nstart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nstop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n",
+              "refId": "A"
+            }
+          ],
+          "title": "Aggregated Line Chart",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 39,
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "influxdb",
+              "uid": "influxdb"
+            },
+            "definition": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)",
+            "hide": 0,
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "name": "customer",
+            "options": [],
+            "query": {
+              "query": "import \"influxdata/influxdb/schema\"\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 0,
+            "type": "query"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "1d",
+              "value": "1d"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "multi": false,
+            "name": "interval",
+            "options": [
+              {
+                "selected": true,
+                "text": "1h",
+                "value": "1h"
+              },
+              {
+                "selected": false,
+                "text": "12h",
+                "value": "12h"
+              },
+              {
+                "selected": false,
+                "text": "1d",
+                "value": "1d"
+              },
+              {
+                "selected": false,
+                "text": "7d",
+                "value": "7d"
+              },
+              {
+                "selected": false,
+                "text": "30d",
+                "value": "30d"
+              },
+              {
+                "selected": false,
+                "text": "182d",
+                "value": "182d"
+              },
+              {
+                "selected": false,
+                "text": "365d",
+                "value": "365d"
+              }
+            ],
+            "query": "1h,12h,1d,7d,30d,182d,365d",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          }
+        ]
+      },
+      "time": {
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
+      },
+      "timepicker": {},
+      "timezone": "utc",
+      "title": "Aggregated Line Chart",
+      "uid": "df7iuv4kojsowd",
+      "version": 4,
+      "weekStart": ""
+    }
+
+  overlay-comparison.json: |-
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "fixedColor": "light-blue",
+                "mode": "fixed"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 14,
+            "w": 23,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influxdb"
+              },
+              "query":"import \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nintervalStr = \"${interval}\"\r\nstart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nstop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\nfrom(bucket: \"meterstream\")\r\n  |> range(start: start, stop: stop)\r\n  |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n  |> filter(fn: (r) => r._field == \"power_consumption\")\r\n  |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n  |> group(columns: [])\r\n  |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n  |> rename(columns: {_value: \"Aktuell period\"})\r\n  |> keep(columns: [\"_time\", \"Aktuell period\"])\r\n",
+              "refId": "A",
+              "legendFormat": "Aktuell period"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "influxdb"
+              },
+              "hide": false,
+              "query":"import \"array\"\r\nimport \"timezone\"\r\nimport \"date\"\r\n\r\noption location = timezone.location(name: \"Europe/Stockholm\")\r\n\r\nenabled = \"${compare_enabled}\"\r\nshift = duration(v: \"${compare_shift}\")\r\nintervalStr = \"${interval}\"\r\n\r\nbaseStart = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStart, unit: 1d) else v.timeRangeStart\r\nbaseStop  = if intervalStr == \"1d\" then date.truncate(t: v.timeRangeStop, unit: 1d) else v.timeRangeStop\r\n\r\ncompare =\r\n  from(bucket: \"meterstream\")\r\n    |> range(start: date.sub(d: shift, from: baseStart), stop: date.sub(d: shift, from: baseStop))\r\n    |> filter(fn: (r) => r._measurement == \"meter_readings\")\r\n    |> filter(fn: (r) => r._field == \"power_consumption\")\r\n    |> filter(fn: (r) => r.customer =~ /^${customer:regex}$/)\r\n    |> group(columns: [])\r\n    |> aggregateWindow(every: duration(v: intervalStr), fn: sum, createEmpty: false, timeSrc: \"_start\")\r\n    |> timeShift(duration: shift)\r\n    |> rename(columns: {_value: \"Jämförelseperiod\"})\r\n    |> keep(columns: [\"_time\", \"Jämförelseperiod\"])\r\n\r\nempty = array.from(rows: [{_time: now(), _value: 0.0}])\r\n  |> rename(columns: {_value: \"Jämförelseperiod\"})\r\n  |> keep(columns: [\"_time\", \"Jämförelseperiod\"])\r\n  |> limit(n: 0)\r\n\r\nif enabled == \"on\" and \"${compare_shift}\" != \"0s\" then\r\n  compare\r\nelse\r\n  empty\r\n",
+              "refId": "B",
+              "legendFormat": "Jämförelseperiod"
+            }
+          ],
+          "title": "Overlay Comparison",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "",
+      "schemaVersion": 39,
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "influxdb",
+              "uid": "influxdb"
+            },
+            "definition": "import \"influxdata/influxdb/schema\"\r\n\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)\r\n",
+            "hide": 0,
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "name": "customer",
+            "options": [],
+            "query": {
+              "query": "import \"influxdata/influxdb/schema\"\r\n\r\nschema.tagValues(\r\n  bucket: \"meterstream\",\r\n  tag: \"customer\",\r\n  predicate: (r) => r._measurement == \"meter_readings\"\r\n)\r\n"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 0,
+            "type": "query"
+          },
+          {
+            "current": {
+              "selected": true,
+              "text": "1d",
+              "value": "1d"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "multi": false,
+            "name": "interval",
+            "options": [
+              {
+                "selected": false,
+                "text": "1h",
+                "value": "1h"
+              },
+              {
+                "selected": false,
+                "text": "12h",
+                "value": "12h"
+              },
+              {
+                "selected": true,
+                "text": "1d",
+                "value": "1d"
+              },
+              {
+                "selected": false,
+                "text": "7d",
+                "value": "7d"
+              },
+              {
+                "selected": false,
+                "text": "30d",
+                "value": "30d"
+              },
+              {
+                "selected": false,
+                "text": "182d",
+                "value": "182d"
+              },
+              {
+                "selected": false,
+                "text": "365d",
+                "value": "365d"
+              }
+            ],
+            "query": "1h,12h,1d,7d,30d,182d,365d",
+            "skipUrlSync": false,
+            "type": "custom"
+          },
+          {
+            "current": {
+              "selected": true,
+              "text": "365d",
+              "value": "365d"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "multi": false,
+            "name": "compare_shift",
+            "options": [
+              {
+                "selected": false,
+                "text": "0s",
+                "value": "0s"
+              },
+              {
+                "selected": false,
+                "text": "1h",
+                "value": "1h"
+              },
+              {
+                "selected": false,
+                "text": "12h",
+                "value": "12h"
+              },
+              {
+                "selected": false,
+                "text": "1d",
+                "value": "1d"
+              },
+              {
+                "selected": false,
+                "text": "7d",
+                "value": "7d"
+              },
+              {
+                "selected": false,
+                "text": "30d",
+                "value": "30d"
+              },
+              {
+                "selected": false,
+                "text": "182d",
+                "value": "182d"
+              },
+              {
+                "selected": true,
+                "text": "365d",
+                "value": "365d"
+              }
+            ],
+            "query": "0s,1h,12h,1d,7d,30d,182d,365d",
+            "skipUrlSync": false,
+            "type": "custom"
+          },
+          {
+            "current": {
+              "selected": true,
+              "text": "on",
+              "value": "on"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "multi": false,
+            "name": "compare_enabled",
+            "options": [
+              {
+                "selected": false,
+                "text": "off",
+                "value": "off"
+              },
+              {
+                "selected": true,
+                "text": "on",
+                "value": "on"
+              }
+            ],
+            "query": "off,on",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          }
+        ]
+      },
+      "time": {
+        "from": "2023-12-01T00:00:00.000Z",
+        "to": "2023-12-31T23:59:59.000Z"
+      },
+      "timepicker": {},
+      "timezone": "utc",
+      "title": "Overlay Comparison",
+      "uid": "bf7l6gu4glrswd",
+      "version": 500,
+      "weekStart": ""
+    }

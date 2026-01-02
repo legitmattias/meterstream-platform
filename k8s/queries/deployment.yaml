@@ -1,0 +1,89 @@
+# ==============================================================================
+# ANALYTICS INTEGRATION: Queries Service Deployment
+# ==============================================================================
+# This service provides analytics data queries with customer isolation.
+# Connects to InfluxDB READ instance for CQRS separation.
+# (Write instance used by Processor, read instance used by Queries/Grafana)
+# ==============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queries
+  labels:
+    app: queries
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: queries
+  template:
+    metadata:
+      labels:
+        app: queries
+    spec:
+      terminationGracePeriodSeconds: 60
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: queries
+          image: gitlab.lnu.se:5050/2dv013/student/team-2025-04-meterstream3/meterstream/queries:latest
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            # CQRS: Point to READ instance (write instance used by Processor)
+            - name: INFLUX_URL
+              value: "http://influxdb-read:8086"
+            - name: INFLUX_ORG
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-init
+                  key: DOCKER_INFLUXDB_INIT_ORG
+            - name: INFLUX_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-init
+                  key: DOCKER_INFLUXDB_INIT_BUCKET
+            # Use read instance token for authentication
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-read-init
+                  key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+            # Write instance (for replication stats in admin dashboard)
+            - name: INFLUX_WRITE_URL
+              value: "http://influxdb:8086"
+            - name: INFLUX_WRITE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-init
+                  key: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
