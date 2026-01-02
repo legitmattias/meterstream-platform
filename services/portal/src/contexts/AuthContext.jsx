@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
         setUser({
           email: userData.email,
           role: userData.role,
+          name: userData.name,
           customerId: userData.customer_id,
         })
       } catch (error) {
@@ -32,6 +33,7 @@ export function AuthProvider({ children }) {
     const userObj = {
       email: userData.email,
       role: userData.role,
+      name: userData.name,
       customerId: userData.customer_id,
     }
     setUser(userObj)

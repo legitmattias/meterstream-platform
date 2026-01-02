@@ -1,6 +1,6 @@
-import React from 'react'
 import { SystemMonitoring } from '../components/SystemMonitoring'
 import { UserManagement } from '../components/UserManagement'
+import { Header } from '../components/Header'
 import { config } from '../config'
 
 const GRAFANA_DASHBOARDS = [
@@ -29,7 +29,6 @@ const GRAFANA_DASHBOARDS = [
 export default function AdminDashboard(props) {
   const {
     user,
-    logout,
     activeTab,
     setActiveTab,
   } = props
@@ -38,16 +37,7 @@ export default function AdminDashboard(props) {
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header">
-        <h1>MeterStream Dashboard</h1>
-        <div className="header-actions">
-          {role !== 'customer' && (
-            <a className="header-link" href="/landing">Back to Landing</a>
-          )}
-          <span className="user-email">Welcome, {user?.email || 'User'}</span>
-          <button onClick={logout}>Logout</button>
-        </div>
-      </header>
+      <Header />
 
       <div className="tabs">
         {role === 'admin' ? (

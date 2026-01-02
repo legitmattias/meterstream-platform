@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { MonthBarChart } from '../components/MonthBarChart'
 import { ConsumptionChart } from '../components/ConsumptionChart'
+import { Header } from '../components/Header'
 import AdminDashboard from './AdminDashboard'
 import './Dashboard.css'
 import {
@@ -246,20 +248,10 @@ export function Dashboard() {
 
     return (
       <div className="customer-dashboard">
-        <header className="customer-header">
-          <div className="customer-header-left">
-            <span className="customer-logo">MeterStream</span>
-            <h1>{LABELS_SV.title}</h1>
-          </div>
-          <div className="customer-header-right">
-            <span className="customer-email">{user?.email}</span>
-            <button className="customer-logout-btn" onClick={logout}>
-              {LABELS_SV.logout}
-            </button>
-          </div>
-        </header>
+        <Header />
 
         <main className="customer-main">
+          <h1 className="customer-page-title">Analytics</h1>
           {/* Filters row */}
           <div className="customer-filters">
             <div className="customer-filter-group">
