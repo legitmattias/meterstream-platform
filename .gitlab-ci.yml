@@ -48,18 +48,19 @@ test-staging-connection:
   rules:
     - when: manual
 
-# test-prod-connection:
-#   stage: test-connection
-#   image:
-#     name: bitnami/kubectl:latest
-#     entrypoint: [""]
-#   script:
-#     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
-#     - export KUBECONFIG=$PWD/kubeconfig
-#     - kubectl config current-context
-#     - kubectl get nodes
-#   rules:
-#     - when: manual
+test-prod-connection:
+  stage: test-connection
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  script:
+    - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+    - export KUBECONFIG=$PWD/kubeconfig
+    - kubectl config current-context
+    - kubectl get nodes
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: manual
 
 # ==============================================================================
 # TEST STAGE - Run unit tests before building
@@ -359,6 +360,8 @@ deploy-mongodb-staging:
         exit 1
       )
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # NATS - Message queue
@@ -372,6 +375,8 @@ deploy-nats-staging:
     # Wait for StatefulSet to be ready (max 2 minutes)
     - kubectl -n meterstream rollout status statefulset/nats --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Ingestion - Receives meter data (depends on: NATS)
@@ -393,6 +398,8 @@ deploy-ingestion-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/ingestion --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Auth - JWT authentication (depends on: MongoDB)
@@ -431,6 +438,8 @@ deploy-auth-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/auth --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Processor - Processes meter data (depends on: NATS, InfluxDB)
@@ -453,6 +462,8 @@ deploy-processor-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/processor --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Gateway - API gateway (depends on: Auth, Ingestion)
@@ -475,6 +486,8 @@ deploy-gateway-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/gateway --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Ingress - Traefik routing (frontend + API gateway)
@@ -485,6 +498,8 @@ deploy-ingress-staging:
     - kubectl apply -f k8s/ingress/ingress.yaml -n meterstream
     - kubectl get ingress -n meterstream
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # InfluxDB - Time-series database (WRITE instance for CQRS)
@@ -510,6 +525,8 @@ deploy-influx-staging:
     # Wait for StatefulSet to be ready (max 3 minutes)
     - kubectl -n meterstream rollout status statefulset/influxdb --timeout=180s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # InfluxDB Read Replica - CQRS read instance (Queries/Grafana read from here)
@@ -536,6 +553,8 @@ deploy-influx-read-staging:
     # Wait for StatefulSet to be ready (max 3 minutes)
     - kubectl -n meterstream rollout status statefulset/influxdb-read --timeout=180s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Setup InfluxDB Edge Data Replication (CQRS sync from write to read)
@@ -559,6 +578,8 @@ setup-influx-replication-staging:
     # Show job logs
     - kubectl -n meterstream logs job/setup-influx-replication
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Grafana - Metrics visualization (depends on: InfluxDB READ instance for CQRS)
@@ -603,6 +624,8 @@ deploy-grafana-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/grafana --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Queries - Analytics data queries (depends on: InfluxDB READ instance for CQRS)
@@ -624,6 +647,8 @@ deploy-queries-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/queries --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # Portal - Frontend web application (depends on: Gateway)
@@ -647,6 +672,8 @@ deploy-portal-staging:
     # Wait for deployment to finish (max 2 minutes)
     - kubectl -n meterstream rollout status deploy/portal --timeout=120s
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+      when: never  # Don't show staging deployments for production releases
     - when: manual
 
 # ==============================================================================
@@ -1051,8 +1078,6 @@ deploy-portal-prod:
   extends: .deploy-base-prod
   needs:
     - job: build-portal
-      optional: true
-    - job: deploy-gateway-prod
       optional: true
   script:
     - require_running gateway
