@@ -54,9 +54,45 @@ test-prod-connection:
     name: bitnami/kubectl:latest
     entrypoint: [""]
   script:
+    # Verify KUBE_CONFIG_PROD_B64 variable exists
+    - |
+      if [ -z "$KUBE_CONFIG_PROD_B64" ]; then
+        echo "ERROR: KUBE_CONFIG_PROD_B64 is not set"
+        echo "Configure this in GitLab: Settings > CI/CD > Variables"
+        exit 1
+      fi
+
+    # Decode kubeconfig
     - echo "$KUBE_CONFIG_PROD_B64" | base64 -d > kubeconfig
+
+    # Verify kubeconfig is valid
+    - |
+      if [ ! -s kubeconfig ]; then
+        echo "ERROR: Decoded kubeconfig is empty"
+        exit 1
+      fi
+
     - export KUBECONFIG=$PWD/kubeconfig
-    - kubectl config current-context
+
+    # Debug: Show kubeconfig structure (without secrets)
+    - echo "Kubeconfig contexts:"
+    - kubectl config get-contexts -o name || true
+
+    # Verify current-context is set
+    - |
+      if ! kubectl config current-context 2>/dev/null; then
+        echo "ERROR: No current-context in kubeconfig"
+        echo "Setting current-context to first available context..."
+        FIRST_CONTEXT=$(kubectl config get-contexts -o name | head -1)
+        if [ -n "$FIRST_CONTEXT" ]; then
+          kubectl config use-context "$FIRST_CONTEXT"
+        else
+          echo "ERROR: No contexts found in kubeconfig"
+          exit 1
+        fi
+      fi
+
+    # Test connection
     - kubectl get nodes
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
