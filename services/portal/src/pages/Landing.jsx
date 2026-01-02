@@ -50,7 +50,7 @@ export function Landing() {
               <div className="news-item">
                 <span className="news-date">Dec 1, 2025</span>
                 <h4>Energy prices</h4>
-                <p>Prices of electric skyrockets, but not for Kalmar!</p>
+                <p>Prices of electricity skyrockets, but not for Kalmar!</p>
               </div>
             </div>
           </div>
