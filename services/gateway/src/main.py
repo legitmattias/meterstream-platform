@@ -59,6 +59,7 @@ app.add_middleware(
         "http://localhost:5173",      # Local dev
         "http://194.47.170.217",      # Staging
         "http://localhost:3000",      # Alternative dev port
+        "http://194.47.171.233",      # prod ip
     ],
     allow_credentials=True,           # Required for cookies
     allow_methods=["*"],
