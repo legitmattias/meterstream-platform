@@ -49,4 +49,4 @@ Individual services can also run outside Docker and connect to the containerized
 
 ## Team
 
-Built by a four-person team over one semester. My primary contributions were across the ingestion and processor services, the Kubernetes deployment manifests, and the CI/CD pipeline.
+Built by a four-person team over one semester. My primary responsibilities were project planning, the gateway, ingestion service, NATS integration, and setting up the development environment and custom scripting. I also did significant work on the portal, Kubernetes manifests, and CI/CD pipeline, and was involved across all parts of the system.
