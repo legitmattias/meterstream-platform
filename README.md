@@ -18,16 +18,16 @@ Client → Gateway → Ingestion → NATS JetStream → Processor → InfluxDB �
 
 ## Architecture
 
-Six Python (FastAPI) microservices, each with its own container and Kubernetes deployment:
+Six microservices, each with its own container and Kubernetes deployment:
 
 | Service | Role |
 |---|---|
-| **gateway** | API routing, JWT validation, request forwarding |
-| **auth** | User/tenant management, JWT issuance (MongoDB) |
-| **ingestion** | Accepts meter readings, publishes to NATS JetStream |
-| **processor** | Consumes from NATS, writes time-series data to InfluxDB |
-| **queries** | Reads from InfluxDB, serves historical and aggregated data |
-| **portal** | Web frontend served via nginx |
+| **gateway** | API routing, JWT validation, request forwarding (Python/FastAPI) |
+| **auth** | User/tenant management, JWT issuance, MongoDB (Python/FastAPI) |
+| **ingestion** | Accepts meter readings, publishes to NATS JetStream (Python/FastAPI) |
+| **processor** | Consumes from NATS, writes time-series data to InfluxDB (Python/FastAPI) |
+| **queries** | Reads from InfluxDB, serves historical and aggregated data (Python/FastAPI) |
+| **portal** | React frontend with admin dashboard, internal staff views, and a customer-facing "Mina sidor" with energy consumption graphs (Recharts) |
 
 Supporting infrastructure: **NATS JetStream** for event streaming, **InfluxDB** for time-series storage, **MongoDB** for auth state, **Grafana** for dashboards.
 
