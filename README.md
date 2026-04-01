@@ -3,6 +3,8 @@
 A cloud-native platform for ingesting, processing, and visualizing energy meter data in real time. Built as a team project in the Cloud Native course (2DV013) at Linnaeus University.
 
 **[Project wiki](https://github.com/legitmattias/meterstream-wiki)** — sprint reports, architecture decisions, post-mortem, and testing documentation.
+- [Post-mortem report](https://github.com/legitmattias/meterstream-wiki/blob/main/post-mortem.md)
+- [Final report](https://github.com/legitmattias/meterstream-wiki/blob/main/report-2.md)
 
 ## What it does
 
@@ -49,4 +51,4 @@ Individual services can also run outside Docker and connect to the containerized
 
 ## Team
 
-Built by a four-person team. My primary responsibilities were project planning, the gateway, ingestion service, NATS integration, as well as setting up the development environment with custom scripting. I also did significant work on the portal, Kubernetes manifests, CI/CD pipeline, and was involved across all parts of the system.
+Built by a four-person team. My primary responsibilities were project planning, the gateway, ingestion service, NATS integration, database replication, as well as setting up the development environment with custom scripting. I also did significant work on the portal, Kubernetes manifests, CI/CD pipeline, and was involved across all parts of the system.
