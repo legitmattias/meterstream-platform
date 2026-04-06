@@ -51,4 +51,4 @@ Individual services can also run outside Docker and connect to the containerized
 
 ## Team
 
-Built by a four-person team. My primary responsibilities were project planning, the gateway, ingestion service, NATS integration, database replication, as well as setting up the development environment with custom scripting. I also did significant work on the portal, Kubernetes manifests, CI/CD pipeline, and was involved across all parts of the system.
+Built by a four-person team. Mattias' primary responsibilities were project planning, the gateway, ingestion service, NATS integration, database replication, as well as setting up the development environment with custom scripting. Mattias also did significant work on the portal, Kubernetes manifests, CI/CD pipeline, and was involved across all parts of the system.
